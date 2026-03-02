@@ -1,3 +1,10 @@
+/* Override dark background if any global styles applied */
+body {
+  background: #ffffff;
+  color: #111;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -38,5 +45,43 @@
 }
 
 .read-the-docs {
-  color: #888;
+  color: #666;
+}
+
+/* Ensure padding doesn't enlarge elements beyond their width */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Make form controls inherit font and behave consistently */
+input, button, textarea, select {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+/* Login form label and input styles */
+.login-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #fff; /* make label text white */
+  font-weight: 600;
+}
+
+.login-input {
+  width: 100%;
+  padding: 10px 40px 10px 10px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #3b3b3b; /* dark input background like design */
+  color: #fff; /* white text */
+}
+
+.login-input::placeholder {
+  color: #d0d0d0; /* lighter placeholder */
+}
+
+/* small adjustment to the form container to match screenshot */
+div[style*="width: 420"] {
+  max-width: 420px;
 }
