@@ -12,6 +12,31 @@ dist
 dist-ssr
 *.local
 
+# Local env files
+.env
+.env.*
+
+# Vite / build caches
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+
+# Parcel cache
+.parcel-cache/
+
+# Editor / IDE / OS extras
+.history/
+.trash/
+cookies.txt
+
+# Docker overrides/local config
+docker-compose.override.yml
+
+# Generated lockfiles should be committed (do NOT ignore package-lock.json / yarn.lock)
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
