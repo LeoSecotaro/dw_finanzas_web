@@ -45,7 +45,7 @@ export default function Login() {
 
       <div className={styles.cardContainer}>
         <form onSubmit={handleSubmit} className={styles.form}>
-          <label className={styles.label}>E-mail</label>
+          <label className={styles.label}>Email:</label>
           <input
             className={styles.input}
             value={email}
@@ -54,7 +54,7 @@ export default function Login() {
             required
           />
 
-          <label className={styles.label}>Contraseña</label>
+          <label className={styles.label}>Contraseña:</label>
           <div className={styles.passwordWrapper}>
             <input
               className={styles.input}

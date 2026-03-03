@@ -31,8 +31,9 @@
 .label {
   display: block;
   margin-bottom: 8px;
-  color: #fff;
+  color: #333; /* dark so it is readable on the white card background */
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
 .input {
@@ -46,6 +47,10 @@
   box-sizing: border-box; /* ensure padding is included in width */
 }
 
+.input::placeholder {
+  color: #bdbdbd; /* lighter placeholder on dark input */
+}
+
 .passwordWrapper {
   position: relative;
   margin-bottom: 12px;
@@ -56,7 +61,7 @@
 .toggleButton {
   position: absolute;
   right: 8px;
-  top: 45%; /* sube un poco el icono */
+  top: 35%; /* sube un poco más el icono */
   transform: translateY(-50%);
   background: transparent;
   border: none;
