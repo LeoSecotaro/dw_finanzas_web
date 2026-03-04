@@ -1,0 +1,107 @@
+.container {
+  display: flex;
+  min-height: 60vh;
+  align-items: center;
+  padding: 20px;
+}
+
+.left {
+  flex: 1;
+  padding: 20px;
+}
+
+.heading {
+  color: #fff; /* was dark, changed to white to be visible on dark background */
+  font-size: 2rem;
+}
+
+.cardContainer {
+  width: 420px;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 20px;
+  background: #fff;
+  box-sizing: border-box; /* avoid children overflowing due to padding */
+}
+
+.form {
+  display: block;
+}
+
+.label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333; /* dark so it is readable on the white card background */
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 44px 10px 10px; /* increased right padding to leave space for icon */
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #3b3b3b;
+  color: #fff;
+  box-sizing: border-box; /* ensure padding is included in width */
+}
+
+.input::placeholder {
+  color: #bdbdbd; /* lighter placeholder on dark input */
+}
+
+.passwordWrapper {
+  position: relative;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center; /* center vertically */
+}
+
+.toggleButton {
+  position: absolute;
+  right: 8px;
+  top: 35%; /* sube un poco más el icono */
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px; /* increased padding for click target */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff; /* ensure svg can inherit currentColor if needed */
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.toggleButton svg {
+  display: block;
+}
+
+/* make sure the inline SVG icons are visible on dark inputs */
+.toggleButton svg path {
+  stroke: #fff;
+}
+
+.result {
+  color: crimson;
+  margin-bottom: 8px;
+}
+
+.submitButton {
+  width: 100%;
+  background: #1677ff;
+  color: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.submitButton:hover {
+  background: #0f62d9; /* azul más oscuro */
+  transform: translateY(-3px); /* se eleva un poco */
+  box-shadow: 0 6px 18px rgba(15,98,217,0.14);
+}
