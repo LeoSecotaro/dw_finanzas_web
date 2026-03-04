@@ -1,0 +1,29 @@
+.btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.btnPrimary {
+  background: #1677ff;
+  color: #fff;
+}
+
+.btnPrimary:hover {
+  background: #0f62d9;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(15,98,217,0.14);
+}
+
+.btnSecondary {
+  background: #4a5568;
+  color: #fff;
+}
+
+.btnSecondary:hover {
+  background: #39434f;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+}
