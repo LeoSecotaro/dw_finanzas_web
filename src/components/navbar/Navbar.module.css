@@ -13,6 +13,26 @@
   z-index: 40;
 }
 
+.backButton{
+  position: absolute;
+  left: 16px;
+  top: 52%; /* bajado un poco */
+  transform: translateY(-50%);
+  background: rgba(255,255,255,0.06);
+  border: none;
+  padding: 8px;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.backButton:hover{
+  transform: translateY(-55%); /* sube un poco */
+  background: rgba(255,255,255,0.12); /* un poco más oscuro */
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+
 .title {
   color: #fff;
   font-weight: 700;

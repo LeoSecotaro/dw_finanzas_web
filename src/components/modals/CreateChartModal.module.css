@@ -1,0 +1,18 @@
+:root{--back:rgba(0,0,0,0.6)}
+.backdrop{position:fixed;inset:0;background:var(--back);display:flex;align-items:center;justify-content:center;z-index:60}
+.modal{background:#fff;border-radius:8px;padding:16px;min-width:420px;max-width:760px;color:#111}
+.header{display:flex;align-items:center;justify-content:space-between}
+.header h3{margin:0;color:inherit}
+.closeButton{background:transparent;border:none;font-size:20px;cursor:pointer;color:inherit;position:relative;transform:translateX(6px);transition:transform 160ms ease,box-shadow 160ms ease,background-color 160ms ease;padding:6px;border-radius:6px}
+.closeButton:hover, .closeButton:focus{transform:translateX(8px) translateY(-4px);box-shadow:0 8px 20px rgba(0,0,0,0.12);background-color:rgba(0,0,0,0.04);outline:none}
+.body{padding:12px 0;color:inherit}
+.body label{display:block;font-weight:600;margin-bottom:6px}
+.body input[type="date"],.body select{padding:8px;border-radius:6px;border:1px solid #ddd}
+.metricButton{padding:8px 10px;background:#f0f0f0;border:1px solid #ddd;border-radius:6px;cursor:pointer}
+.metricActive{padding:8px 10px;background:#1677ff;color:#fff;border:1px solid #145ec6;border-radius:6px;cursor:pointer}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.cancelButton{background:#eee;border:1px solid #ddd;padding:8px 12px;border-radius:6px;color:#111;transition:transform 140ms ease,background-color 140ms ease,box-shadow 140ms ease}
+.submitButton{background:#1677ff;color:#fff;padding:8px 12px;border-radius:6px;border:none;transition:transform 140ms ease,background-color 140ms ease,box-shadow 140ms ease}
+
+.cancelButton:hover{background:#e0e0e0;transform:translateY(-3px);box-shadow:0 6px 18px rgba(0,0,0,0.08)}
+.submitButton:hover{background:#0f62d9;transform:translateY(-3px);box-shadow:0 6px 18px rgba(15,98,217,0.14)}
