@@ -17,7 +17,7 @@ export default function UploadModal({ isOpen, onClose }: Props) {
   const handleUpload = async () => {
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      toast.error('Seleccioná un archivo');
+      toast.error('Seleccioná un archivo', { autoClose: 1700 });
       return;
     }
 
@@ -27,7 +27,7 @@ export default function UploadModal({ isOpen, onClose }: Props) {
     setLoading(true);
     try {
       await apiClient.post('/raw_files', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('Archivo subido correctamente');
+      toast.success('Archivo subido correctamente', { autoClose: 1500 });
       onClose();
     } catch (err) {
       console.error('upload failed', err);

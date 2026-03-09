@@ -1,4 +1,5 @@
 import React from 'react';
+import { toast } from 'react-toastify';
 import styles from './CreateChartModal.module.css';
 import { getCompare, getCompareMulti } from '../../api/reportsApi';
 import apiClient from '../../api/apiClient';
@@ -31,9 +32,27 @@ export default function CreateChartModal({ isOpen, onClose, onCreate }: Props) {
     // Build params
     const selectedMetrics = Object.keys(metrics).filter((k) => metrics[k]);
     if (selectedMetrics.length === 0) {
-      alert('Seleccioná al menos una métrica');
+      toast.error('Seleccioná al menos una métrica', { autoClose: 1500 });
       return;
     }
+
+    // Validate dates
+    if (!startDate || !endDate) {
+      toast.error('Seleccioná una fecha desde y hasta', { autoClose: 1500 });
+      return;
+    }
+    const fromD = new Date(startDate);
+    const toD = new Date(endDate);
+    if (isNaN(fromD.getTime()) || isNaN(toD.getTime())) {
+      toast.error('Seleccioná fechas válidas', { autoClose: 1500 });
+      return;
+    }
+    if (fromD > toD) {
+      toast.error('La fecha "Desde" debe ser anterior a "Hasta"', { autoClose: 1800 });
+      return;
+    }
+
+    setLoading(true);
 
     // Backend expects different param names depending on the route.
     // Map local values -> backend: from/to, obra (name), group_by, and either left/right or sources.
@@ -63,7 +82,6 @@ export default function CreateChartModal({ isOpen, onClose, onCreate }: Props) {
       console.error('error fetching compare', err);
       alert('Error al solicitar datos');
     } finally {
-      setLoading(true);
       setLoading(false);
     }
   };
