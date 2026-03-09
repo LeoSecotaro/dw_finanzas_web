@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './CreateChartModal.module.css';
-import { getCompare } from '../../api/reportsApi';
+import { getCompare, getCompareMulti } from '../../api/reportsApi';
 import apiClient from '../../api/apiClient';
 
 type Props = {
@@ -35,17 +35,27 @@ export default function CreateChartModal({ isOpen, onClose, onCreate }: Props) {
       return;
     }
 
-    const params: any = {
-      start_date: startDate,
-      end_date: endDate,
-      metrics: selectedMetrics,
-      group_by: 'month'
-    };
-    if (selectedObra) params.entity_type = 'obra_social', params.entity_ids = [selectedObra];
+    // Backend expects different param names depending on the route.
+    // Map local values -> backend: from/to, obra (name), group_by, and either left/right or sources.
+    const from = startDate;
+    const to = endDate;
+    // If selectedObra is an id, try to resolve the display name from obraSocials
+    const obraName = selectedObra ? (obraSocials.find((o: any) => String(o.id) === String(selectedObra))?.name || selectedObra) : undefined;
 
-    setLoading(true);
+    let resp;
     try {
-      const resp = await getCompare(params);
+      if (selectedMetrics.length === 2) {
+        // Use compare with left and right
+        const params: any = { left: selectedMetrics[0], right: selectedMetrics[1], from, to, group_by: 'month' };
+        if (obraName) params.obra = obraName;
+        resp = await getCompare(params);
+      } else {
+        // Use compare_multi for 1 or more sources
+        const params: any = { sources: selectedMetrics.join(','), from, to, group_by: 'month' };
+        if (obraName) params.obra = obraName;
+        resp = await getCompareMulti(params);
+      }
+
       // resp.data expected to be { labels, datasets }
       onCreate({ id: Date.now().toString(), title: selectedMetrics.join(' vs '), data: resp.data });
       onClose();
@@ -53,6 +63,7 @@ export default function CreateChartModal({ isOpen, onClose, onCreate }: Props) {
       console.error('error fetching compare', err);
       alert('Error al solicitar datos');
     } finally {
+      setLoading(true);
       setLoading(false);
     }
   };
