@@ -1,8 +1,8 @@
 import React from 'react';
-import Navbar from '../components/navbar/Navbar';
-import UploadModal from '../components/modals/UploadModal';
-import CreateChartModal from '../components/modals/CreateChartModal';
-import CardsContainer from '../components/graphicsCards/graphicsCards';
+import Navbar from '../../components/navbar/Navbar';
+import UploadModal from '../../components/modals/UploadModal';
+import CreateChartModal from '../../components/modals/CreateChartModal';
+import CardsContainer from '../../components/graphicsCards/graphicsCards';
 import styles from './Finance.module.css';
 
 export default function Finance() {
