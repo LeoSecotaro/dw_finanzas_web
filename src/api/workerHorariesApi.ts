@@ -2,6 +2,7 @@ import apiClient from './apiClient';
 
 export type HoraryParams = {
   date?: string; // YYYY-MM-DD
+  day_id?: number; // optional link to days table
   start_time: string; // HH:MM
   end_time: string; // HH:MM
   note?: string;
