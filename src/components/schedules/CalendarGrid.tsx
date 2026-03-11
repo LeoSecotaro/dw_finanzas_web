@@ -3,7 +3,7 @@ import { listDays } from '../../api/daysApi';
 import type { DayItem } from '../../api/daysApi';
 
 // week view calendar that paints schedule blocks per-hour
-export default function CalendarGrid({ horaries = [], onCreate }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void }) {
+export default function CalendarGrid({ horaries = [], onCreate, onDelete, onReplace, onDeleteReplacement }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void, onDelete?: (hr: any) => void, onReplace?: (hr: any) => void, onDeleteReplacement?: (replacement: any, horaryId: number) => void }) {
   const defaultShort = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const [days, setDays] = useState<DayItem[]>(defaultShort.map((d, i) => ({ id: i + 1, short_name: d })));
 
@@ -37,6 +37,7 @@ export default function CalendarGrid({ horaries = [], onCreate }: { horaries?: a
   }, []);
 
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
+  const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
 
   const parseTime = (t: string) => {
     if (!t) return 0;
@@ -147,6 +148,8 @@ export default function CalendarGrid({ horaries = [], onCreate }: { horaries?: a
                       const s = item.s;
                       const e = item.e;
 
+                      const key = `${hr.id ?? idx}-${day.id}`;
+
                       const visibleStart = startHour * 60;
                       const totalVisibleMinutes = (24 - startHour) * 60;
                       const pixelsPerMinute = containerHeight / totalVisibleMinutes;
@@ -156,17 +159,34 @@ export default function CalendarGrid({ horaries = [], onCreate }: { horaries?: a
                       const maxHeight = Math.max(0, containerHeight - topPx);
                       const heightPx = Math.min(rawHeightPx, maxHeight);
 
-                      const bg = hr._pending ? '#bfbfbf' : (hr.color || (hr.status === 'finished' || hr.state === 'terminated' ? '#b6f0c8' : '#1677ff'));
+                      // detect replacement on this horary (API may return replacements array or single replacement)
+                      const replacement = (Array.isArray(hr.replacements) && hr.replacements.length)
+                        ? hr.replacements[hr.replacements.length - 1]
+                        : (hr.replacement || null);
+
+                      // choose background color: pending -> gray, finished/terminated -> light green, replaced -> green, else default blue
+                      const isReplaced = !!replacement;
+                      const bg = hr._pending
+                        ? '#bfbfbf'
+                        : (isReplaced ? '#32a84b' : (hr.color || (hr.status === 'finished' || hr.state === 'terminated' ? '#b6f0c8' : '#1677ff')));
                       const textColor = (bg === '#b6f0c8' || bg === '#bfbfbf') ? '#0b0b0b' : '#fff';
 
                       const overlapOffset = (item.colIndex || 0) * 6; // offset only when necessary
+                      const isBlockHovered = hoveredBlock === key;
+                      const hoverTransform = isBlockHovered ? 'translateY(-6px)' : 'none';
+                      const hoverShadow = isBlockHovered ? '0 12px 30px rgba(0,0,0,0.35)' : '0 4px 10px rgba(0,0,0,0.12)';
 
                       const title = hr.title || hr.name || hr.note || hr.description;
-                      const subtitle = hr.status || hr.state || (hr._pending ? 'Pendiente' : undefined);
+                      // if replaced, show 'Reemplazo: Nombre Apellido'; otherwise show status/subtitle
+                      const subtitle = isReplaced
+                        ? `Reemplazo: ${(replacement.name || '').toString().trim()}${replacement.last_name ? ' ' + replacement.last_name : ''}`
+                        : (hr.status || hr.state || (hr._pending ? 'Pendiente' : undefined));
 
                       return (
                         <div
-                          key={`${hr.id ?? idx}-${day.id}`}
+                          key={key}
+                          onMouseEnter={() => setHoveredBlock(key)}
+                          onMouseLeave={() => setHoveredBlock(null)}
                           style={{
                             position: 'absolute',
                             left: columnPadding + overlapOffset,
@@ -178,20 +198,54 @@ export default function CalendarGrid({ horaries = [], onCreate }: { horaries?: a
                             borderRadius: 8,
                             padding: '8px 10px',
                             boxSizing: 'border-box',
-                            boxShadow: '0 4px 10px rgba(0,0,0,0.12)',
+                            boxShadow: hoverShadow,
                             overflow: 'hidden',
-                            zIndex: 5,
+                            zIndex: isBlockHovered ? 30 : 5,
                             display: 'flex',
                             flexDirection: 'column',
                             justifyContent: 'center',
+                            cursor: onReplace ? 'pointer' : (onDelete ? 'pointer' : 'default'),
+                            transition: 'all 180ms ease',
+                            transform: hoverTransform,
                           }}
                           title={`${title}${subtitle ? ' — ' + subtitle : ''} (${hr.start_time || hr.start} - ${hr.end_time || hr.end})`}
+                          onClick={(e) => { e.stopPropagation(); if (onReplace) onReplace(hr); }}
                         >
-                          <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1 }}>{title}</div>
-                          {subtitle && <div style={{ fontSize: 11, opacity: 0.85 }}>{subtitle}</div>}
-                        </div>
-                      );
-                    });
+                           {/* delete X button top-right inside block */}
+                           {onDelete && (
+                             <button
+                               onClick={(ev) => { ev.stopPropagation(); // if replaced, ask to delete replacement, else delete horary
+                                 if (replacement && onDeleteReplacement) return onDeleteReplacement(replacement, hr.id);
+                                 if (onDelete) return onDelete(hr);
+                               }}
+                               aria-label="Eliminar"
+                               style={{
+                                 position: 'absolute',
+                                 right: 8,
+                                 top: 8,
+                                 background: 'rgba(0,0,0,0.28)',
+                                 border: 'none',
+                                 color: '#fff',
+                                 borderRadius: 6,
+                                 padding: '6px 8px',
+                                 cursor: 'pointer',
+                                 fontSize: 18,
+                                 lineHeight: 1,
+                                 zIndex: 8,
+                                 display: 'flex',
+                                 alignItems: 'center',
+                                 justifyContent: 'center',
+                                 transition: 'background 140ms ease, transform 140ms ease',
+                               }}
+                             >
+                               ×
+                             </button>
+                           )}
+                            <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1 }}>{title}</div>
+                            {subtitle && <div style={{ fontSize: 11, opacity: 0.95 }}>{subtitle}</div>}
+                          </div>
+                       );
+                     });
                   })();
 
                 })()}
