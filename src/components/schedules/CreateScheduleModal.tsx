@@ -7,6 +7,7 @@ type Payload = {
   day_id?: number;
   start: string; // HH:MM
   end: string;   // HH:MM
+  title?: string; // optional title
 };
 
 export default function CreateScheduleModal({
@@ -31,6 +32,7 @@ export default function CreateScheduleModal({
   const [dayId, setDayId] = React.useState<number | undefined>(days[0]?.id);
   const [start, setStart] = React.useState<string>('06:00');
   const [end, setEnd] = React.useState<string>('14:00');
+  const [title, setTitle] = React.useState<string>('');
   const [error, setError] = React.useState<string | null>(null);
   const [hoverCancel, setHoverCancel] = React.useState(false);
   const [hoverCreate, setHoverCreate] = React.useState(false);
@@ -40,6 +42,7 @@ export default function CreateScheduleModal({
       // if initial values provided, use them, otherwise defaults
       setStart(initialStart || '06:00');
       setEnd(initialEnd || '14:00');
+      setTitle('');
       setError(null);
       // fetch real days from backend
       listDays().then((r) => {
@@ -75,7 +78,7 @@ export default function CreateScheduleModal({
     }
     if (loading) return; // prevent duplicate
     const selected = days.find(d => d.id === dayId);
-    onCreate({ day: selected?.short_name || selected?.name || '', day_id: dayId, start, end });
+    onCreate({ day: selected?.short_name || selected?.name || '', day_id: dayId, start, end, title: title ? title.trim() : undefined });
   };
 
   return (
@@ -91,6 +94,10 @@ export default function CreateScheduleModal({
         </button>
         <h3 style={{ marginTop: 0 }}>Crear horario</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, gridColumn: 'span 2' }}>
+            Título (opcional)
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej. Jornada mañana" style={{ marginTop: 6, padding: '8px 10px', borderRadius: 6, background: '#2a2a2a', color: '#fff', border: '1px solid #333' }} />
+          </label>
           <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13 }}>
             Día
             <select value={dayId} onChange={(e) => setDayId(Number(e.target.value))} style={{ marginTop: 6, padding: '8px 10px', borderRadius: 6, background: '#2a2a2a', color: '#fff', border: '1px solid #333' }}>

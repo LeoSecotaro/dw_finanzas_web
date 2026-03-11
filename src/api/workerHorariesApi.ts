@@ -6,6 +6,7 @@ export type HoraryParams = {
   start_time: string; // HH:MM
   end_time: string; // HH:MM
   note?: string;
+  title?: string; // optional title for the horary
 };
 
 export async function listWorkerHoraries(params?: Record<string, any>) {

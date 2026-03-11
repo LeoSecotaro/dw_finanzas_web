@@ -37,7 +37,7 @@ export default function Schedules() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const handleCreate = (p: { day: string; day_id?: number; start: string; end: string }) => {
+  const handleCreate = (p: { day: string; day_id?: number; start: string; end: string; title?: string }) => {
     setCreating(true);
     // prepare payload expected by backend (only permitted fields)
     const payload: HoraryParams = {
@@ -46,6 +46,7 @@ export default function Schedules() {
     };
 
     if (p.day_id) payload.day_id = p.day_id;
+    if (p.title) payload.title = p.title;
 
     createWorkerHorary(payload).then((res) => {
       // assume API returns created object in res.data
@@ -61,7 +62,7 @@ export default function Schedules() {
         alert('Error al crear horario: ' + JSON.stringify(serverMessage));
       } else {
         // fallback: add local item so user sees it; mark with temp id
-        const newItem = { id: Date.now(), day: p.day, day_id: p.day_id, start: p.start, end: p.end, _pending: true };
+        const newItem = { id: Date.now(), day: p.day, day_id: p.day_id, start: p.start, end: p.end, title: p.title, _pending: true };
         setHoraries((s) => [...s, newItem]);
       }
       setShowCreate(false);
