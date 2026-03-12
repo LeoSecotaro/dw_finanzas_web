@@ -3,7 +3,7 @@ import { listDays } from '../../api/daysApi';
 import type { DayItem } from '../../api/daysApi';
 
 // week view calendar that paints schedule blocks per-hour
-export default function CalendarGrid({ horaries = [], onCreate, onDelete, onReplace, onDeleteReplacement }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void, onDelete?: (hr: any) => void, onReplace?: (hr: any) => void, onDeleteReplacement?: (replacement: any, horaryId: number) => void }) {
+export default function CalendarGrid({ horaries = [], onCreate, onDelete, onReplace, onDeleteReplacement, weekStart, weekDirection = 'none' }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void, onDelete?: (hr: any) => void, onReplace?: (hr: any) => void, onDeleteReplacement?: (replacement: any, horaryId: number) => void, weekStart?: Date, weekDirection?: 'next'|'prev'|'none' }) {
   const defaultShort = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const [days, setDays] = useState<DayItem[]>(defaultShort.map((d, i) => ({ id: i + 1, short_name: d })));
 
@@ -38,6 +38,8 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
 
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
+  // control per-block entrance animation (staggered)
+  const [blocksEntering, setBlocksEntering] = useState(true);
 
   const parseTime = (t: string) => {
     if (!t) return 0;
@@ -55,11 +57,41 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
     return (Number.isFinite(hh) ? hh : 0) * 60 + (Number.isFinite(mm) ? mm : 0);
   };
 
+  // animation state for week transitions (use percentage translate for clear slide)
+  const [animStyle, setAnimStyle] = useState({ transform: 'translateX(0%)', opacity: 1 });
+
+  React.useEffect(() => {
+    if (weekDirection && weekDirection !== 'none') {
+      const offsetPercent = weekDirection === 'next' ? 100 : -100;
+      // start container off-screen and hide block entrances
+      setAnimStyle({ transform: `translateX(${offsetPercent}%)`, opacity: 0 });
+      setBlocksEntering(false);
+      // animate container into place and then trigger staggered block entrances
+      requestAnimationFrame(() => {
+        setAnimStyle({ transform: 'translateX(0%)', opacity: 1 });
+        // small delay so container starts moving first, then blocks animate
+        setTimeout(() => setBlocksEntering(true), 90);
+      });
+    } else {
+      // initial mount / no direction -> ensure blocks visible
+      setBlocksEntering(true);
+      setAnimStyle({ transform: 'translateX(0%)', opacity: 1 });
+    }
+  }, [weekStart, weekDirection]);
+
   return (
-    <div style={{ width: '100%', boxSizing: 'border-box' }}>
-      <div style={{ background: '#2d2d2d', color: '#fff', borderRadius: 8, padding: innerPadding, width: '100%', maxWidth: 1800, margin: '0 auto', boxSizing: 'border-box', minHeight: cardMinHeight }}>
+    <div style={{ width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+      <div style={{ background: '#2d2d2d', color: '#fff', borderRadius: 8, padding: innerPadding, width: '100%', maxWidth: 1800, margin: '0 auto', boxSizing: 'border-box', minHeight: cardMinHeight, transform: animStyle.transform, opacity: animStyle.opacity, transition: 'transform 420ms cubic-bezier(.2,.9,.3,1), opacity 320ms ease', willChange: 'transform, opacity' }}>
         <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-          {days.map((d) => <div key={d.id} style={{ flex: 1, textAlign: 'center', fontSize: 12 }}>{d.short_name || d.name || d.id}</div>)}
+          {days.map((d, idx) => {
+            const dateStr = weekStart ? new Date(weekStart.getTime() + idx * 24 * 60 * 60 * 1000).toLocaleDateString() : null;
+            return (
+              <div key={d.id} style={{ flex: 1, textAlign: 'center', fontSize: 12 }}>
+                <div>{d.short_name || d.name || d.id}</div>
+                {dateStr && <div style={{ fontSize: 11, color: '#bbb' }}>{dateStr}</div>}
+              </div>
+            );
+          })}
         </div>
 
         {/* content container: force explicit height so grid stretches */}
@@ -76,7 +108,7 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
           </div>
 
           {/* day columns */}
-          {days.map((day) => (
+          {days.map((day, dayIdx) => (
             <div key={day.id} style={{ flex: 1, minWidth: 180, position: 'relative', height: '100%' }}>
               <div style={{ height: '100%', background: '#2f2f2f', borderRadius: 6, padding: columnPadding, boxSizing: 'border-box', position: 'relative' }}>
                 <div style={{ height: headerHeight }} />
@@ -160,9 +192,22 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                       const heightPx = Math.min(rawHeightPx, maxHeight);
 
                       // detect replacement on this horary (API may return replacements array or single replacement)
-                      const replacement = (Array.isArray(hr.replacements) && hr.replacements.length)
-                        ? hr.replacements[hr.replacements.length - 1]
-                        : (hr.replacement || null);
+                      // if weekStart provided, prefer replacements whose occurrence_date matches the current column date
+                      const ms = 24 * 60 * 60 * 1000;
+                      const dayDateISO = weekStart ? new Date(weekStart.getTime() + dayIdx * ms).toISOString().slice(0,10) : null;
+                      const reps = Array.isArray(hr.replacements) ? hr.replacements : (hr.replacements ? [hr.replacements] : []);
+                      let replacement: any = null;
+                      if (reps && reps.length) {
+                        if (dayDateISO) {
+                          // only show replacements explicitly created for this date when viewing a specific week
+                          replacement = reps.find((r: any) => (r.occurrence_date ? String(r.occurrence_date) === dayDateISO : false)) || null;
+                        } else {
+                          // no weekStart provided -> fall back to last replacement (previous behavior)
+                          replacement = reps[reps.length - 1];
+                        }
+                      } else {
+                        replacement = hr.replacement || null;
+                      }
 
                       // choose background color: pending -> gray, finished/terminated -> light green, replaced -> green, else default blue
                       const isReplaced = !!replacement;
@@ -173,13 +218,19 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
 
                       const overlapOffset = (item.colIndex || 0) * 6; // offset only when necessary
                       const isBlockHovered = hoveredBlock === key;
+                      // entrance animation / stagger
+                      const entryDelay = idx * 40 + 80; // ms per block
+                      const isEntered = blocksEntering;
+                      const entranceTransform = isEntered ? 'none' : 'translateY(12px) scale(0.995)';
                       const hoverTransform = isBlockHovered ? 'translateY(-6px)' : 'none';
-                      const hoverShadow = isBlockHovered ? '0 12px 30px rgba(0,0,0,0.35)' : '0 4px 10px rgba(0,0,0,0.12)';
+                      // combine hover with entrance: hover should win when active
+                      const appliedTransform = isBlockHovered ? hoverTransform : entranceTransform;
+                      const entryShadow = isBlockHovered ? '0 12px 30px rgba(0,0,0,0.35)' : (isEntered ? '0 4px 10px rgba(0,0,0,0.12)' : '0 2px 6px rgba(0,0,0,0.06)');
 
-                      const title = hr.title || hr.name || hr.note || hr.description;
+                      const title = hr.title || hr.name || hr.note || hr.description || '';
                       // if replaced, show 'Reemplazo: Nombre Apellido'; otherwise show status/subtitle
                       const subtitle = isReplaced
-                        ? `Reemplazo: ${(replacement.name || '').toString().trim()}${replacement.last_name ? ' ' + replacement.last_name : ''}`
+                        ? `Reemplazo: ${(replacement?.name || '').toString().trim()}${replacement?.last_name ? ' ' + replacement.last_name : ''}`
                         : (hr.status || hr.state || (hr._pending ? 'Pendiente' : undefined));
 
                       return (
@@ -198,16 +249,18 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                             borderRadius: 8,
                             padding: '8px 10px',
                             boxSizing: 'border-box',
-                            boxShadow: hoverShadow,
+                            boxShadow: entryShadow,
                             overflow: 'hidden',
                             zIndex: isBlockHovered ? 30 : 5,
                             display: 'flex',
                             flexDirection: 'column',
                             justifyContent: 'center',
                             cursor: onReplace ? 'pointer' : (onDelete ? 'pointer' : 'default'),
-                            transition: 'all 180ms ease',
-                            transform: hoverTransform,
-                          }}
+                            transition: `transform 360ms cubic-bezier(.2,.9,.3,1), opacity 260ms ease, box-shadow 220ms ease`,
+                            transitionDelay: `${entryDelay}ms`,
+                            transform: appliedTransform,
+                            opacity: isEntered ? 1 : 0,
+                           }}
                           title={`${title}${subtitle ? ' — ' + subtitle : ''} (${hr.start_time || hr.start} - ${hr.end_time || hr.end})`}
                           onClick={(e) => { e.stopPropagation(); if (onReplace) onReplace(hr); }}
                         >

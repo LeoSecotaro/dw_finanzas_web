@@ -7,17 +7,20 @@ export default function CreateReplacementModal({
   loading = false,
   horaries = [],
   initialHoraryId,
+  weekStart,
 }: {
   visible: boolean;
   onClose: () => void;
-  onCreate: (p: { horaryId: number; name: string; last_name: string }) => void;
+  onCreate: (p: { horaryId: number; name: string; last_name: string; occurrence_date?: string }) => void;
   loading?: boolean;
   horaries?: any[];
   initialHoraryId?: number;
+  weekStart?: Date;
 }) {
   const [horaryId, setHoraryId] = React.useState<number | undefined>(initialHoraryId);
   const [name, setName] = React.useState<string>('');
   const [lastName, setLastName] = React.useState<string>('');
+  const [occurrenceDate, setOccurrenceDate] = React.useState<string>('');
   const [error, setError] = React.useState<string | null>(null);
   const [hoverCancel, setHoverCancel] = React.useState(false);
   const [hoverCreate, setHoverCreate] = React.useState(false);
@@ -29,8 +32,20 @@ export default function CreateReplacementModal({
       setLastName('');
       if (initialHoraryId) setHoraryId(initialHoraryId);
       else if (horaries && horaries.length) setHoraryId(horaries[0].id);
+      // default occurrence date: if we have weekStart and a selected horary with day_id, set that date
+      if (weekStart) {
+        const parent = (initialHoraryId && horaries && horaries.length) ? horaries.find(h => h.id === initialHoraryId) : null;
+        if (parent && parent.day_id) {
+          const ms = 24 * 60 * 60 * 1000;
+          const dayIndex = (parent.day_id || 1) - 1; // day_id 1 => Monday
+          const d = new Date(weekStart.getTime() + dayIndex * ms);
+          setOccurrenceDate(d.toISOString().slice(0,10));
+        } else if (weekStart) {
+          setOccurrenceDate(weekStart.toISOString().slice(0,10));
+        }
+      }
     }
-  }, [visible, initialHoraryId, horaries]);
+  }, [visible, initialHoraryId, horaries, weekStart]);
 
   if (!visible) return null;
 
@@ -45,7 +60,7 @@ export default function CreateReplacementModal({
       return;
     }
     if (loading) return;
-    onCreate({ horaryId, name: name.trim(), last_name: lastName.trim() });
+    onCreate({ horaryId, name: name.trim(), last_name: lastName.trim(), occurrence_date: occurrenceDate || undefined });
   };
 
   return (
@@ -61,6 +76,10 @@ export default function CreateReplacementModal({
         <h3 style={{ marginTop: 0 }}>Crear reemplazo</h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, gridColumn: 'span 2' }}>
+            Fecha del reemplazo
+            <input type="date" value={occurrenceDate} onChange={(e) => setOccurrenceDate(e.target.value)} style={{ marginTop: 6, padding: '8px 10px', borderRadius: 6, background: '#2a2a2a', color: '#fff', border: '1px solid #333' }} />
+          </label>
           <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, gridColumn: 'span 2' }}>
             Horario padre
             <select

@@ -1,5 +1,5 @@
 import React from 'react';
-import { listWorkerHoraries, createWorkerHorary, deleteWorkerHorary, createReplacement, deleteReplacement } from '../../api/workerHorariesApi';
+import { listWorkerHoraries, getWorkerHorary, createWorkerHorary, deleteWorkerHorary, createReplacement, deleteReplacement } from '../../api/workerHorariesApi';
 import { toast } from 'react-toastify';
 import type { HoraryParams } from '../../api/workerHorariesApi';
 import CalendarGrid from '../../components/schedules/CalendarGrid';
@@ -26,11 +26,45 @@ export default function Schedules() {
   const [modalInitialDayId, setModalInitialDayId] = React.useState<number | undefined>(undefined);
   const [modalInitialStart, setModalInitialStart] = React.useState<string | undefined>(undefined);
   const [modalInitialEnd, setModalInitialEnd] = React.useState<string | undefined>(undefined);
+  const [weekOffset, setWeekOffset] = React.useState(0);
+  const [weekDirection, setWeekDirection] = React.useState<'next'|'prev'|'none'>('none');
+
+  const getStartOfWeek = (date: Date, offset = 0) => {
+    const d = new Date(date);
+    const day = d.getDay(); // 0 (Sun) .. 6 (Sat)
+    // compute Monday as start of week
+    const diffToMon = (day === 0 ? -6 : 1 - day);
+    d.setDate(d.getDate() + diffToMon + offset * 7);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const weekStart = React.useMemo(() => getStartOfWeek(new Date(), weekOffset), [weekOffset]);
 
   React.useEffect(() => {
     setLoading(true);
-    listWorkerHoraries().then((r) => {
-      setHoraries(r.data || []);
+    listWorkerHoraries().then(async (r) => {
+      const list = r.data || [];
+      // If backend returns horaries without nested replacements, fetch full details per horary
+      const needsDetails = list.some((h: any) => typeof h.replacements === 'undefined');
+      if (needsDetails && list.length) {
+        try {
+          const details = await Promise.allSettled(list.map((h: any) => getWorkerHorary(h.id)));
+          const merged = list.map((h: any, i: number) => {
+            const det = details[i];
+            if (det && det.status === 'fulfilled') {
+              return det.value.data || h;
+            }
+            return h;
+          });
+          setHoraries(merged);
+        } catch (err) {
+          console.warn('failed to fetch horary details, using list response', err);
+          setHoraries(list);
+        }
+      } else {
+        setHoraries(list);
+      }
     }).catch((e) => {
       console.error('failed to load horaries', e);
       setHoraries([]);
@@ -165,7 +199,24 @@ export default function Schedules() {
           {loading ? <div>Cargando...</div> : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ margin: 0 }}>Calendario</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onClick={() => { setWeekDirection('prev'); setWeekOffset((s) => s - 1); setTimeout(() => setWeekDirection('none'), 520); }}
+                    aria-label="Semana anterior"
+                    style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: '#2a2a2a', color: '#fff', cursor: 'pointer' }}
+                  >
+                    ‹
+                  </button>
+                  <h3 style={{ margin: 0 }}>Calendario</h3>
+                  <div style={{ fontSize: 13, color: '#aaa' }}>{`${weekStart.toLocaleDateString()} — ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString()}`}</div>
+                  <button
+                    onClick={() => { setWeekDirection('next'); setWeekOffset((s) => s + 1); setTimeout(() => setWeekDirection('none'), 520); }}
+                    aria-label="Semana siguiente"
+                    style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: '#2a2a2a', color: '#fff', cursor: 'pointer' }}
+                  >
+                    ›
+                  </button>
+                </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setShowReplacement(true)}
@@ -205,7 +256,7 @@ export default function Schedules() {
                   </button>
                 </div>
               </div>
-              <CalendarGrid horaries={horaries} onCreate={handleGridCreate} onDelete={handleGridDeleteRequest} onReplace={handleGridReplaceRequest} onDeleteReplacement={handleDeleteReplacementRequest} />
+              <CalendarGrid weekStart={weekStart} weekDirection={weekDirection} horaries={horaries} onCreate={handleGridCreate} onDelete={handleGridDeleteRequest} onReplace={handleGridReplaceRequest} onDeleteReplacement={handleDeleteReplacementRequest} />
             </>
           )}
         </div>
@@ -223,6 +274,7 @@ export default function Schedules() {
       <CreateReplacementModal
         visible={showReplacement}
         onClose={() => { setShowReplacement(false); setInitialReplacementHoraryId(undefined); }}
+        weekStart={weekStart}
         onCreate={(p) => {
           setCreatingReplacement(true);
           // call nested create replacement: POST /worker_horaries/:horary_id/replacements
@@ -240,31 +292,35 @@ export default function Schedules() {
             return;
           }
 
-          createReplacement(p.horaryId, { name: p.name, last_name: p.last_name, start_time, end_time }).then((res) => {
-            // on success close modal and update local state so CalendarGrid shows replacement immediately
-            setShowReplacement(false);
-            setInitialReplacementHoraryId(undefined);
-            const created = res?.data;
-            if (created) {
-              setHoraries((s) => s.map((h) => {
-                if (h.id === p.horaryId) {
-                  const existing = Array.isArray(h.replacements) ? h.replacements : (h.replacements ? [h.replacements] : []);
-                  return { ...h, replacements: [...existing, created], replacement: created };
-                }
-                return h;
-              }));
-            }
-            // show success toast even if API didn't return full object
-            toast.success('Reemplazo creado con éxito', { autoClose: 2000 });
-          }).catch((e) => {
-            console.error('failed to create replacement', e);
-            alert('No se pudo crear el reemplazo.');
-          }).finally(() => setCreatingReplacement(false));
-        }}
-        loading={creatingReplacement}
-        horaries={horaries}
-        initialHoraryId={initialReplacementHoraryId}
-      />
+          // include occurrence_date if provided so backend stores replacement for that date
+          const payload: any = { name: p.name, last_name: p.last_name, start_time, end_time };
+          if ((p as any).occurrence_date) payload.occurrence_date = (p as any).occurrence_date;
+
+          createReplacement(p.horaryId, payload).then((res) => {
+             // on success close modal and update local state so CalendarGrid shows replacement immediately
+             setShowReplacement(false);
+             setInitialReplacementHoraryId(undefined);
+             const created = res?.data;
+             if (created) {
+               setHoraries((s) => s.map((h) => {
+                 if (h.id === p.horaryId) {
+                   const existing = Array.isArray(h.replacements) ? h.replacements : (h.replacements ? [h.replacements] : []);
+                   return { ...h, replacements: [...existing, created], replacement: created };
+                 }
+                 return h;
+               }));
+             }
+             // show success toast even if API didn't return full object
+             toast.success('Reemplazo creado con éxito', { autoClose: 2000 });
+           }).catch((e) => {
+             console.error('failed to create replacement', e);
+             alert('No se pudo crear el reemplazo.');
+           }).finally(() => setCreatingReplacement(false));
+         }}
+         loading={creatingReplacement}
+         horaries={horaries}
+         initialHoraryId={initialReplacementHoraryId}
+       />
 
       {/* Delete confirmation modal (reusable) */}
       <ConfirmModal
