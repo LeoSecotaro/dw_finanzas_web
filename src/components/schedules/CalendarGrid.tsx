@@ -57,6 +57,61 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
     return (Number.isFinite(hh) ? hh : 0) * 60 + (Number.isFinite(mm) ? mm : 0);
   };
 
+  // normalize apodo/key from a horary object (supports several shapes)
+  const getNormalizedApodo = (h: any) => {
+    if (!h) return '';
+    const candidates = [
+      h.apodo, h.nickname, h.alias, h.apodo_name,
+      h.worker?.apodo, h.worker?.nickname, h.worker?.apodo_name,
+      h.user?.apodo, h.user?.nickname,
+      // prefer stable id fallback so workers without apodo still get consistent colors
+      (h.worker && h.worker.id) ? `worker_${h.worker.id}` : undefined,
+      (h.user && h.user.id) ? `user_${h.user.id}` : undefined,
+      (h.name || h.first_name || '') + ' ' + (h.last_name || '')
+    ];
+    const found = candidates.find(c => c !== undefined && c !== null && String(c).trim() !== '');
+    return found ? String(found).trim().toLowerCase() : '';
+  };
+
+  // map apodo (nickname) -> unique color
+  const apodoColorMap = React.useMemo(() => {
+    const items = (horaries || []).map((h: any) => getNormalizedApodo(h)).filter(Boolean);
+    const apodos = Array.from(new Set(items));
+    // base palette (vibrant, readable on dark background)
+    const basePalette = ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#073b4c', '#8a2be2', '#ff7f50', '#00b894', '#e84393', '#fd7e14', '#00cec9', '#6c5ce7', '#2ec4b6', '#ff6b6b', '#845ec2'];
+    const palette: string[] = basePalette.slice();
+    if (apodos.length > palette.length) {
+      // generate more colors using golden-angle spacing in HSL
+      const needed = apodos.length - palette.length;
+      for (let i = 0; i < needed; i++) {
+        const hue = Math.round((i * 137.508) % 360); // golden angle
+        palette.push(`hsl(${hue} 70% 50%)`);
+      }
+    }
+    // shuffle palette for a random distribution each mount
+    for (let i = palette.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [palette[i], palette[j]] = [palette[j], palette[i]];
+    }
+    const map: Record<string, string> = {};
+    apodos.forEach((a, i) => { map[a] = palette[i]; });
+    // debug: show detected apodos and assigned colors in console
+    try { console.debug('CalendarGrid apodos detected', apodos, 'apodoColorMap', map); } catch (e) { /* ignore */ }
+    return map;
+  }, [horaries]);
+
+  // deterministic color generator for any string (fallback)
+  const generateColorFromString = (str: string) => {
+    // djb2 hash
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash) + str.charCodeAt(i);
+      hash = hash & hash; // keep as 32-bit int
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue} 65% 50%)`;
+  };
+
   // animation state for week transitions (use percentage translate for clear slide)
   const [animStyle, setAnimStyle] = useState({ transform: 'translateX(0%)', opacity: 1 });
 
@@ -177,6 +232,8 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
 
                     return positioned.map((item, idx) => {
                       const hr = item.hr;
+                      // debug per-block apodo
+                      try { console.debug('CalendarGrid block', hr.id, 'normalizedApodo', getNormalizedApodo(hr)); } catch (e) { /* ignore */ }
                       const s = item.s;
                       const e = item.e;
 
@@ -211,9 +268,19 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
 
                       // choose background color: pending -> gray, finished/terminated -> light green, replaced -> green, else default blue
                       const isReplaced = !!replacement;
+                      // use normalized apodo (lowercased, supports nested shapes) to lookup color
+                      const apodoNorm = getNormalizedApodo(hr) || null;
+                      let apodoColor = null;
+                      if (apodoNorm) {
+                        apodoColor = apodoColorMap[apodoNorm] || generateColorFromString(apodoNorm);
+                      }
+                      // debug when using hr.color fallback
+                      if (!apodoColor && hr.color) {
+                        try { console.debug('CalendarGrid using hr.color fallback for', hr.id, hr.color); } catch (e) { }
+                      }
                       const bg = hr._pending
                         ? '#bfbfbf'
-                        : (isReplaced ? '#32a84b' : (hr.color || (hr.status === 'finished' || hr.state === 'terminated' ? '#b6f0c8' : '#1677ff')));
+                        : (isReplaced ? '#32a84b' : (apodoColor || hr.color || (hr.status === 'finished' || hr.state === 'terminated' ? '#b6f0c8' : '#1677ff')));
                       const textColor = (bg === '#b6f0c8' || bg === '#bfbfbf') ? '#0b0b0b' : '#fff';
 
                       const overlapOffset = (item.colIndex || 0) * 6; // offset only when necessary

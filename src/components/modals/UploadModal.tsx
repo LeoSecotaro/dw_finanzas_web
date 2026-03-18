@@ -1,14 +1,20 @@
 import React from 'react';
 import styles from './UploadModal.module.css';
-import apiClient from '../../api/apiClient';
+import { API_CONFIG } from '../../config/api';
 import { toast } from 'react-toastify';
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  // endpoint relative to API client base (default '/raw_files')
+  endpoint?: string;
+  // form field name for the file (defaults to 'raw_file[file]')
+  fieldName?: string;
+  // optional callback when upload succeeds
+  onUploaded?: () => void;
 };
 
-export default function UploadModal({ isOpen, onClose }: Props) {
+export default function UploadModal({ isOpen, onClose, endpoint = '/raw_files', fieldName = 'raw_file[file]', onUploaded }: Props) {
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -22,16 +28,29 @@ export default function UploadModal({ isOpen, onClose }: Props) {
     }
 
     const form = new FormData();
-    form.append('raw_file[file]', file);
+    form.append(fieldName, file);
 
     setLoading(true);
     try {
-      await apiClient.post('/raw_files', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('Archivo subido correctamente', { autoClose: 1500 });
-      onClose();
-    } catch (err) {
+      const url = `${API_CONFIG.BASE_URL}${endpoint}`;
+      const res = await fetch(url, { method: 'POST', body: form, credentials: 'include' });
+      const text = await res.text();
+      let data: any = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+      if (!res.ok) {
+        console.error('upload failed', data || res.statusText);
+        const serverMessage = data && (data.error || data.message || JSON.stringify(data)) || res.statusText || 'Error al subir archivo';
+        toast.error(serverMessage, { autoClose: 4000 });
+      } else {
+        toast.success('Archivo subido correctamente', { autoClose: 1500 });
+        if (onUploaded && typeof onUploaded === 'function') {
+          try { onUploaded(); } catch (e) { /* ignore */ }
+        }
+        onClose();
+      }
+    } catch (err: any) {
       console.error('upload failed', err);
-      toast.error('Error al subir archivo');
+      toast.error(err?.message || 'Error al subir archivo', { autoClose: 4000 });
     } finally {
       setLoading(false);
     }

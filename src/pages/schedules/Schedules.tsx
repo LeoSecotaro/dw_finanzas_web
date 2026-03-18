@@ -7,6 +7,8 @@ import Navbar from '../../components/navbar/Navbar';
 import CreateScheduleModal from '../../components/schedules/CreateScheduleModal';
 import ConfirmModal from '../../components/modals/ConfirmModal';
 import CreateReplacementModal from '../../components/schedules/CreateReplacementModal';
+import UploadModal from '../../components/modals/UploadModal';
+import { listConsultorios } from '../../api/consultoriosApi';
 
 export default function Schedules() {
   const [horaries, setHoraries] = React.useState<any[]>([]);
@@ -15,6 +17,8 @@ export default function Schedules() {
   const [creating, setCreating] = React.useState(false);
   const [showReplacement, setShowReplacement] = React.useState(false);
   const [creatingReplacement, setCreatingReplacement] = React.useState(false);
+  const [showUpload, setShowUpload] = React.useState(false);
+  const [hoverUpload, setHoverUpload] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [selectedToDelete, setSelectedToDelete] = React.useState<any | null>(null);
   const [deleting, setDeleting] = React.useState(false);
@@ -28,6 +32,8 @@ export default function Schedules() {
   const [modalInitialEnd, setModalInitialEnd] = React.useState<string | undefined>(undefined);
   const [weekOffset, setWeekOffset] = React.useState(0);
   const [weekDirection, setWeekDirection] = React.useState<'next'|'prev'|'none'>('none');
+  const [consultorios, setConsultorios] = React.useState<any[]>([]);
+  const [selectedConsultorioId, setSelectedConsultorioId] = React.useState<number | null>(null);
 
   const getStartOfWeek = (date: Date, offset = 0) => {
     const d = new Date(date);
@@ -41,11 +47,14 @@ export default function Schedules() {
 
   const weekStart = React.useMemo(() => getStartOfWeek(new Date(), weekOffset), [weekOffset]);
 
-  React.useEffect(() => {
+  // load horaries (extracted so we can refresh after uploads)
+  const loadHoraries = React.useCallback(async () => {
     setLoading(true);
-    listWorkerHoraries().then(async (r) => {
+    try {
+      const params: Record<string, any> = {};
+      if (selectedConsultorioId) params.consultorio_id = selectedConsultorioId;
+      const r = await listWorkerHoraries(params);
       const list = r.data || [];
-      // If backend returns horaries without nested replacements, fetch full details per horary
       const needsDetails = list.some((h: any) => typeof h.replacements === 'undefined');
       if (needsDetails && list.length) {
         try {
@@ -65,11 +74,33 @@ export default function Schedules() {
       } else {
         setHoraries(list);
       }
-    }).catch((e) => {
+    } catch (e) {
       console.error('failed to load horaries', e);
       setHoraries([]);
-    }).finally(() => setLoading(false));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedConsultorioId]);
+
+  React.useEffect(() => {
+    loadHoraries();
+  }, [loadHoraries]);
+
+  // load consultorios for dropdown
+  React.useEffect(() => {
+    listConsultorios().then((r) => {
+      setConsultorios(r.data || []);
+      // if none selected, default to first
+      if (!selectedConsultorioId && Array.isArray(r.data) && r.data.length) {
+        setSelectedConsultorioId(r.data[0].id);
+      }
+    }).catch((e) => console.error('failed to load consultorios', e));
   }, []);
+
+  // reload horaries when selected consultorio changes
+  React.useEffect(() => {
+    loadHoraries();
+  }, [selectedConsultorioId]);
 
   const handleCreate = (p: { day: string; day_id?: number; start: string; end: string; title?: string }) => {
     setCreating(true);
@@ -216,8 +247,33 @@ export default function Schedules() {
                   >
                     ›
                   </button>
+                  {/* consultorios dropdown */}
+                  <select value={selectedConsultorioId ?? ''} onChange={(e) => setSelectedConsultorioId(e.target.value ? Number(e.target.value) : null)} style={{ background: '#222', color: '#fff', border: '1px solid #333', padding: '6px 8px', borderRadius: 6, marginLeft: 8 }}>
+                    <option value="">Todos</option>
+                    {consultorios.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name || c.nombre || `Consultorio ${c.id}`}</option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setShowUpload(true)}
+                    onMouseEnter={() => setHoverUpload(true)}
+                    onMouseLeave={() => setHoverUpload(false)}
+                    style={{
+                      background: hoverUpload ? '#3a3a3a' : '#2a2a2a',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      transition: 'all 160ms ease',
+                      transform: hoverUpload ? 'translateY(-3px)' : 'none',
+                      boxShadow: hoverUpload ? '0 8px 20px rgba(0,0,0,0.24)' : 'none',
+                    }}
+                  >
+                    Subir Excel
+                  </button>
                   <button
                     onClick={() => setShowReplacement(true)}
                     onMouseEnter={() => setHoverReplacement(true)}
@@ -269,6 +325,14 @@ export default function Schedules() {
         initialDayId={modalInitialDayId}
         initialStart={modalInitialStart}
         initialEnd={modalInitialEnd}
+      />
+
+      <UploadModal
+        isOpen={showUpload}
+        onClose={() => setShowUpload(false)}
+        endpoint={'/horarios/upload'}
+        fieldName={'file'}
+        onUploaded={() => { loadHoraries(); toast.success('Horarios importados', { autoClose: 1600 }); }}
       />
 
       <CreateReplacementModal
