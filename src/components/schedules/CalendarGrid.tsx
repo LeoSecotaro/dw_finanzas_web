@@ -60,13 +60,17 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
   // normalize apodo/key from a horary object (supports several shapes)
   const getNormalizedApodo = (h: any) => {
     if (!h) return '';
+    // accept several common id shapes returned by different backends
+    const userId = h.user_id ?? h.userId ?? h.user?.id ?? null;
+    const workerId = h.worker_id ?? h.workerId ?? h.worker?.id ?? null;
+
     const candidates = [
       h.apodo, h.nickname, h.alias, h.apodo_name,
       h.worker?.apodo, h.worker?.nickname, h.worker?.apodo_name,
       h.user?.apodo, h.user?.nickname,
       // prefer stable id fallback so workers without apodo still get consistent colors
-      (h.worker && h.worker.id) ? `worker_${h.worker.id}` : undefined,
-      (h.user && h.user.id) ? `user_${h.user.id}` : undefined,
+      userId ? `user_${userId}` : undefined,
+      workerId ? `worker_${workerId}` : undefined,
       (h.name || h.first_name || '') + ' ' + (h.last_name || '')
     ];
     const found = candidates.find(c => c !== undefined && c !== null && String(c).trim() !== '');
@@ -203,10 +207,44 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                 {/* Floating absolute blocks: draw each horary as a positioned card over the hour grid */}
                 {(() => {
                   const dayShort = (day.short_name || day.name || '').toString().toLowerCase();
+
+                  // helper: parse a date-like value into a date-only (midnight) object
+                  const parseDateOnly = (val: any) => {
+                    if (!val) return null;
+                    const d = new Date(val);
+                    if (isNaN(d.getTime())) return null;
+                    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                  };
+
+                  // helper: determine if a horary is active for a given calendar date
+                  // if horary has end_date (and optional start_date), only show when the column date
+                  // falls within [start_date, end_date]. If no date bounds are provided, keep showing.
+                  const isHoraryActiveOnDate = (hr: any, date: Date | null) => {
+                    if (!date) return true; // cannot filter without a column date
+                    if (!hr) return false;
+                    // if no bounds present, assume global/always-active
+                    if (!hr.end_date && !hr.start_date) return true;
+                    const end = parseDateOnly(hr.end_date);
+                    const start = parseDateOnly(hr.start_date) || (end ? new Date(end.getFullYear(), end.getMonth(), 1) : null);
+                    if (!end && !start) return true;
+                    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                    if (start && end) return d >= start && d <= end;
+                    if (end) return d >= new Date(end.getFullYear(), end.getMonth(), 1) && d <= end;
+                    if (start) return d >= start;
+                    return true;
+                  };
+
+                  // compute the actual calendar date for this column
+                  const ms = 24 * 60 * 60 * 1000;
+                  const columnDate = weekStart ? new Date(weekStart.getTime() + dayIdx * ms) : null;
+
                   const dayHoraries = (horaries || []).filter((hr: any) => {
                     const hrDayId = hr.day_id ?? undefined;
                     const hrDayStr = hr.day ? String(hr.day).toLowerCase() : undefined;
-                    return (hrDayId && hrDayId === day.id) || (hrDayStr && hrDayStr.startsWith(dayShort));
+                    const matchesDay = (hrDayId && hrDayId === day.id) || (hrDayStr && hrDayStr.startsWith(dayShort));
+                    if (!matchesDay) return false;
+                    // only show if horary is active on the column date (month-aware)
+                    return isHoraryActiveOnDate(hr, columnDate);
                   });
 
                   return (() => {

@@ -50,15 +50,24 @@ export default function Schedules() {
   // load horaries (extracted so we can refresh after uploads)
   const loadHoraries = React.useCallback(async () => {
     setLoading(true);
+    const usedConsultorio = selectedConsultorioId;
     try {
       const params: Record<string, any> = {};
       if (selectedConsultorioId) params.consultorio_id = selectedConsultorioId;
       const r = await listWorkerHoraries(params);
+      // ignore this response if selected consultorio changed while fetching
+      if (usedConsultorio !== selectedConsultorioId) {
+        return;
+      }
       const list = r.data || [];
       const needsDetails = list.some((h: any) => typeof h.replacements === 'undefined');
       if (needsDetails && list.length) {
         try {
           const details = await Promise.allSettled(list.map((h: any) => getWorkerHorary(h.id)));
+          // if selection changed during nested detail requests, abort applying results
+          if (usedConsultorio !== selectedConsultorioId) {
+            return;
+          }
           const merged = list.map((h: any, i: number) => {
             const det = details[i];
             if (det && det.status === 'fulfilled') {
@@ -66,12 +75,18 @@ export default function Schedules() {
             }
             return h;
           });
+          try { console.log('loaded horaries (merged)', merged.slice(0,5)); } catch (e) { /* ignore */ }
+          try { (window as any).__horaries = merged; } catch (e) { /* ignore */ }
           setHoraries(merged);
         } catch (err) {
           console.warn('failed to fetch horary details, using list response', err);
+          try { console.log('loaded horaries (list)', (list || []).slice(0,5)); } catch (e) { /* ignore */ }
+          try { (window as any).__horaries = list; } catch (e) { /* ignore */ }
           setHoraries(list);
         }
       } else {
+        try { console.log('loaded horaries (list)', (list || []).slice(0,5)); } catch (e) { /* ignore */ }
+        try { (window as any).__horaries = list; } catch (e) { /* ignore */ }
         setHoraries(list);
       }
     } catch (e) {
@@ -90,10 +105,8 @@ export default function Schedules() {
   React.useEffect(() => {
     listConsultorios().then((r) => {
       setConsultorios(r.data || []);
-      // if none selected, default to first
-      if (!selectedConsultorioId && Array.isArray(r.data) && r.data.length) {
-        setSelectedConsultorioId(r.data[0].id);
-      }
+      // NOTE: intentionally do NOT auto-select the first consultorio here.
+      // Keeping selection null shows "Todos" on initial page load (requested behavior).
     }).catch((e) => console.error('failed to load consultorios', e));
   }, []);
 
@@ -112,11 +125,17 @@ export default function Schedules() {
 
     if (p.day_id) payload.day_id = p.day_id;
     if (p.title) payload.title = p.title;
+    // include consultorio if modal provided it (ensures list endpoint will return the created item when filtered)
+    if ((p as any).consultorio_id) payload.consultorio_id = (p as any).consultorio_id;
 
     createWorkerHorary(payload).then((res) => {
       // assume API returns created object in res.data
       const created = res.data;
+      // optimistically add created item to local state so user sees it immediately
       setHoraries((s) => [...s, created]);
+      // re-sync authoritative list from server to avoid shape/visibility mismatches
+      // (e.g. server-side consultorio filtering or normalized fields)
+      try { loadHoraries(); } catch (e) { /* best-effort refresh */ }
       setShowCreate(false);
       toast.success('Horario creado con éxito', { autoClose: 1000 });
     }).catch((e: any) => {
