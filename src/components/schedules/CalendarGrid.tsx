@@ -3,7 +3,7 @@ import { listDays } from '../../api/daysApi';
 import type { DayItem } from '../../api/daysApi';
 
 // week view calendar that paints schedule blocks per-hour
-export default function CalendarGrid({ horaries = [], onCreate, onDelete, onReplace, onDeleteReplacement, weekStart, weekDirection = 'none' }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void, onDelete?: (hr: any) => void, onReplace?: (hr: any) => void, onDeleteReplacement?: (replacement: any, horaryId: number) => void, weekStart?: Date, weekDirection?: 'next'|'prev'|'none' }) {
+export default function CalendarGrid({ horaries = [], onCreate, onDelete, onReplace, onDeleteReplacement, onDeleteFalta, onActionRequest, weekStart, weekDirection = 'none' }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void, onDelete?: (hr: any) => void, onReplace?: (hr: any) => void, onDeleteReplacement?: (replacement: any, horaryId: number) => void, onDeleteFalta?: (falta: any, horaryId: number) => void, onActionRequest?: (hr: any) => void, weekStart?: Date, weekDirection?: 'next'|'prev'|'none' }) {
   const defaultShort = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const [days, setDays] = useState<DayItem[]>(defaultShort.map((d, i) => ({ id: i + 1, short_name: d })));
 
@@ -208,10 +208,24 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                 {(() => {
                   const dayShort = (day.short_name || day.name || '').toString().toLowerCase();
 
-                  // helper: parse a date-like value into a date-only (midnight) object
+                  // helper: parse a date-like value into a date-only (midnight local) object
                   const parseDateOnly = (val: any) => {
                     if (!val) return null;
-                    const d = new Date(val);
+                    // If it's already a Date, normalize to local date (midnight)
+                    if (val instanceof Date) return new Date(val.getFullYear(), val.getMonth(), val.getDate());
+                    const s = String(val);
+                    // prefer extracting YYYY-MM-DD to avoid timezone shifts from ISO strings
+                    const m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+                    if (m) {
+                      const year = Number(m[1]);
+                      const month = Number(m[2]);
+                      const day = Number(m[3]);
+                      if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+                        return new Date(year, month - 1, day);
+                      }
+                    }
+                    // fallback to Date parsing, then normalize
+                    const d = new Date(s);
                     if (isNaN(d.getTime())) return null;
                     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
                   };
@@ -246,6 +260,13 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                     // only show if horary is active on the column date (month-aware)
                     return isHoraryActiveOnDate(hr, columnDate);
                   });
+
+                  // debug: when nothing is shown, log a short summary to help trace the issue
+                  try {
+                    if ((horaries || []).length && (!dayHoraries || dayHoraries.length === 0)) {
+                      console.debug('CalendarGrid debug: no horaries for column', { columnDate: columnDate ? columnDate.toISOString().slice(0,10) : null, dayId: day.id, dayShort, horariesSample: (horaries || []).slice(0,4).map(h=>({ id: h.id, day_id: h.day_id, start_date: h.start_date, end_date: h.end_date })) });
+                    }
+                  } catch (e) { /* ignore logging errors */ }
 
                   return (() => {
                     // build sorted list with numeric times
@@ -294,31 +315,41 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                       let replacement: any = null;
                       if (reps && reps.length) {
                         if (dayDateISO) {
-                          // only show replacements explicitly created for this date when viewing a specific week
                           replacement = reps.find((r: any) => (r.occurrence_date ? String(r.occurrence_date) === dayDateISO : false)) || null;
                         } else {
-                          // no weekStart provided -> fall back to last replacement (previous behavior)
                           replacement = reps[reps.length - 1];
                         }
                       } else {
                         replacement = hr.replacement || null;
                       }
 
-                      // choose background color: pending -> gray, finished/terminated -> light green, replaced -> green, else default blue
+                      // faltas (absences): API may return hr.faltas array or hr.falta
+                      const faltas = Array.isArray(hr.faltas) ? hr.faltas : (hr.faltas ? [hr.faltas] : []);
+                      let falta: any = null;
+                      if (faltas && faltas.length) {
+                        if (dayDateISO) {
+                          falta = faltas.find((f: any) => (f.occurrence_date ? String(f.occurrence_date) === dayDateISO : false)) || null;
+                        } else {
+                          falta = faltas[faltas.length - 1];
+                        }
+                      } else {
+                        falta = hr.falta || null;
+                      }
+
                       const isReplaced = !!replacement;
-                      // use normalized apodo (lowercased, supports nested shapes) to lookup color
+                      const isFalta = !!falta;
+
+                      // compute color per apodo/user fallback
                       const apodoNorm = getNormalizedApodo(hr) || null;
                       let apodoColor = null;
                       if (apodoNorm) {
                         apodoColor = apodoColorMap[apodoNorm] || generateColorFromString(apodoNorm);
                       }
-                      // debug when using hr.color fallback
-                      if (!apodoColor && hr.color) {
-                        try { console.debug('CalendarGrid using hr.color fallback for', hr.id, hr.color); } catch (e) { }
-                      }
+
+                      // if there's a falta (absence), show in red and preferred over replacement
                       const bg = hr._pending
                         ? '#bfbfbf'
-                        : (isReplaced ? '#32a84b' : (apodoColor || hr.color || (hr.status === 'finished' || hr.state === 'terminated' ? '#b6f0c8' : '#1677ff')));
+                        : (isFalta ? '#d64545' : (isReplaced ? '#32a84b' : (apodoColor || hr.color || (hr.status === 'finished' || hr.state === 'terminated' ? '#b6f0c8' : '#1677ff'))));
                       const textColor = (bg === '#b6f0c8' || bg === '#bfbfbf') ? '#0b0b0b' : '#fff';
 
                       const overlapOffset = (item.colIndex || 0) * 6; // offset only when necessary
@@ -334,9 +365,11 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
 
                       const title = hr.title || hr.name || hr.note || hr.description || '';
                       // if replaced, show 'Reemplazo: Nombre Apellido'; otherwise show status/subtitle
-                      const subtitle = isReplaced
-                        ? `Reemplazo: ${(replacement?.name || '').toString().trim()}${replacement?.last_name ? ' ' + replacement.last_name : ''}`
-                        : (hr.status || hr.state || (hr._pending ? 'Pendiente' : undefined));
+                      const subtitle = isFalta
+                        ? `Falta: ${(falta?.reason || falta?.motivo || '').toString().trim()}`
+                        : (isReplaced
+                          ? `Reemplazo: ${(replacement?.name || '').toString().trim()}${replacement?.last_name ? ' ' + replacement.last_name : ''}`
+                          : (hr.status || hr.state || (hr._pending ? 'Pendiente' : undefined)));
 
                       return (
                         <div
@@ -367,12 +400,16 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                             opacity: isEntered ? 1 : 0,
                            }}
                           title={`${title}${subtitle ? ' — ' + subtitle : ''} (${hr.start_time || hr.start} - ${hr.end_time || hr.end})`}
-                          onClick={(e) => { e.stopPropagation(); if (onReplace) onReplace(hr); }}
+                          onClick={(e) => { e.stopPropagation(); // prefer actionRequest if provided (open choice modal), else fallback to onReplace
+                            if (onActionRequest) return onActionRequest(hr);
+                            if (onReplace) return onReplace(hr);
+                          }}
                         >
                            {/* delete X button top-right inside block */}
                            {onDelete && (
                              <button
-                               onClick={(ev) => { ev.stopPropagation(); // if replaced, ask to delete replacement, else delete horary
+                               onClick={(ev) => { ev.stopPropagation(); // if there's a falta, delete that; else if replaced, delete replacement; else delete horary
+                                 if (falta && onDeleteFalta) return onDeleteFalta(falta, hr.id);
                                  if (replacement && onDeleteReplacement) return onDeleteReplacement(replacement, hr.id);
                                  if (onDelete) return onDelete(hr);
                                }}

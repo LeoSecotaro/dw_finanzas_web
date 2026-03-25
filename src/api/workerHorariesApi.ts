@@ -42,3 +42,20 @@ export async function updateReplacement(horaryId: number, replacementId: number,
 export async function deleteReplacement(horaryId: number, replacementId: number) {
   return apiClient.delete(`/worker_horaries/${horaryId}/replacements/${replacementId}`);
 }
+
+// faltas (nested resource)
+export async function listFaltas(horaryId: number) {
+  return apiClient.get(`/worker_horaries/${horaryId}/faltas`);
+}
+
+export async function createFalta(horaryId: number, data: any) {
+  return apiClient.post(`/worker_horaries/${horaryId}/faltas`, { falta: data });
+}
+
+export async function updateFalta(horaryId: number, faltaId: number, data: any) {
+  return apiClient.patch(`/worker_horaries/${horaryId}/faltas/${faltaId}`, { falta: data });
+}
+
+export async function deleteFalta(horaryId: number, faltaId: number) {
+  return apiClient.delete(`/worker_horaries/${horaryId}/faltas/${faltaId}`);
+}

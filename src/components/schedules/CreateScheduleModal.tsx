@@ -20,6 +20,7 @@ export default function CreateScheduleModal({
   initialDayId,
   initialStart,
   initialEnd,
+  initialConsultorioId,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -28,6 +29,7 @@ export default function CreateScheduleModal({
   initialDayId?: number;
   initialStart?: string;
   initialEnd?: string;
+  initialConsultorioId?: number | null;
 }) {
   const defaultDays = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const [days, setDays] = React.useState<DayItem[]>(defaultDays.map((d, i) => ({ id: i + 1, short_name: d })));
@@ -71,7 +73,12 @@ export default function CreateScheduleModal({
         const items = r.data || [];
         setConsultorios(items);
         if (items && items.length) {
-          setConsultorioId(items[0].id);
+          // prefer initialConsultorioId if provided and exists
+          if (typeof initialConsultorioId !== 'undefined' && initialConsultorioId !== null && items.find((c: any) => c.id === initialConsultorioId)) {
+            setConsultorioId(initialConsultorioId);
+          } else {
+            setConsultorioId(items[0].id);
+          }
         }
       }).catch((e) => {
         console.warn('failed to load consultorios', e);
