@@ -1,5 +1,5 @@
 import React from 'react';
-import { listWorkerHoraries, getWorkerHorary, createWorkerHorary, deleteWorkerHorary, createReplacement, deleteReplacement } from '../../api/workerHorariesApi';
+import { listWorkerHoraries, getWorkerHorary, createWorkerHorary, deleteWorkerHorary, createReplacement, deleteReplacement, createFalta, deleteFalta } from '../../api/workerHorariesApi';
 import { toast } from 'react-toastify';
 import type { HoraryParams } from '../../api/workerHorariesApi';
 import CalendarGrid from '../../components/schedules/CalendarGrid';
@@ -9,6 +9,7 @@ import ConfirmModal from '../../components/modals/ConfirmModal';
 import CreateReplacementModal from '../../components/schedules/CreateReplacementModal';
 import UploadModal from '../../components/modals/UploadModal';
 import { listConsultorios } from '../../api/consultoriosApi';
+import CreateFaltaModal from '../../components/schedules/CreateFaltaModal';
 
 export default function Schedules() {
   const [horaries, setHoraries] = React.useState<any[]>([]);
@@ -25,6 +26,13 @@ export default function Schedules() {
   const [hoverCreate, setHoverCreate] = React.useState(false);
   const [hoverReplacement, setHoverReplacement] = React.useState(false);
   const [initialReplacementHoraryId, setInitialReplacementHoraryId] = React.useState<number | undefined>(undefined);
+  const [showActionChoice, setShowActionChoice] = React.useState(false);
+  const [actionHorary, setActionHorary] = React.useState<any | null>(null);
+  const [showFaltaModal, setShowFaltaModal] = React.useState(false);
+  const [creatingFalta, setCreatingFalta] = React.useState(false);
+  const [hoverActionCancel, setHoverActionCancel] = React.useState(false);
+  const [hoverActionReplace, setHoverActionReplace] = React.useState(false);
+  const [hoverActionFalta, setHoverActionFalta] = React.useState(false);
 
   // modal initial values when opened from calendar click
   const [modalInitialDayId, setModalInitialDayId] = React.useState<number | undefined>(undefined);
@@ -97,21 +105,21 @@ export default function Schedules() {
     }
   }, [selectedConsultorioId]);
 
-  React.useEffect(() => {
-    loadHoraries();
-  }, [loadHoraries]);
-
   // load consultorios for dropdown
   React.useEffect(() => {
     listConsultorios().then((r) => {
-      setConsultorios(r.data || []);
-      // NOTE: intentionally do NOT auto-select the first consultorio here.
-      // Keeping selection null shows "Todos" on initial page load (requested behavior).
+      const data = r.data || [];
+      setConsultorios(data);
+      // auto-select the first consultorio so we don't show a "Todos" option
+      if (data && data.length > 0) {
+        setSelectedConsultorioId(data[0].id);
+      }
     }).catch((e) => console.error('failed to load consultorios', e));
   }, []);
 
   // reload horaries when selected consultorio changes
   React.useEffect(() => {
+    if (selectedConsultorioId === null) return; // avoid unfiltered requests
     loadHoraries();
   }, [selectedConsultorioId]);
 
@@ -126,7 +134,12 @@ export default function Schedules() {
     if (p.day_id) payload.day_id = p.day_id;
     if (p.title) payload.title = p.title;
     // include consultorio if modal provided it (ensures list endpoint will return the created item when filtered)
-    if ((p as any).consultorio_id) payload.consultorio_id = (p as any).consultorio_id;
+    if ((p as any).consultorio_id) {
+      payload.consultorio_id = (p as any).consultorio_id;
+    } else if (selectedConsultorioId) {
+      // fallback: if modal didn't provide consultorio, use the currently selected consultorio
+      payload.consultorio_id = selectedConsultorioId;
+    }
 
     createWorkerHorary(payload).then((res) => {
       // assume API returns created object in res.data
@@ -173,10 +186,33 @@ export default function Schedules() {
     setShowReplacement(true);
   };
 
+  // new handler when user clicks a block: open action choice modal
+  const handleGridActionRequest = (hr: any) => {
+    setActionHorary(hr);
+    setShowActionChoice(true);
+  };
+
+  const handleOpenReplacementFromChoice = () => {
+    setInitialReplacementHoraryId(actionHorary?.id);
+    setShowReplacement(true);
+    setShowActionChoice(false);
+  };
+
+  const handleOpenFaltaFromChoice = () => {
+    setShowFaltaModal(true);
+    setShowActionChoice(false);
+  };
+
   // handler when user requests deletion of a replacement
   const handleDeleteReplacementRequest = (replacement: any, horaryId: number) => {
     // store as selectedToDelete but mark it as replacement to show different message
     setSelectedToDelete({ ...replacement, _isReplacement: true, horary_id: horaryId });
+    setShowDeleteConfirm(true);
+  };
+
+  // handler when user requests deletion of a falta (absence)
+  const handleDeleteFaltaRequest = (falta: any, horaryId: number) => {
+    setSelectedToDelete({ ...falta, _isFalta: true, horary_id: horaryId });
     setShowDeleteConfirm(true);
   };
 
@@ -235,12 +271,45 @@ export default function Schedules() {
          setShowDeleteConfirm(false);
          setSelectedToDelete(null);
        }
+     } else if (selectedToDelete?._isFalta) {
+       // delete falta
+       const faltaId = selectedToDelete.id;
+       const horaryId = selectedToDelete.horary_id;
+       if (faltaId && horaryId) {
+         setDeleting(true);
+         deleteFalta(horaryId, faltaId).then(() => {
+           setHoraries((s) => s.map((h) => {
+             if (h.id === horaryId) {
+               const remaining = (Array.isArray(h.faltas) ? h.faltas : (h.faltas ? [h.faltas] : [])).filter((r: any) => r.id !== faltaId);
+               return { ...h, faltas: remaining, falta: remaining[remaining.length - 1] || null };
+             }
+             return h;
+           }));
+           toast.success('Falta eliminada con éxito', { autoClose: 1000 });
+           setShowDeleteConfirm(false);
+           setSelectedToDelete(null);
+         }).catch((e) => {
+           console.error('failed to delete falta', e);
+           alert('No se pudo eliminar la falta.');
+           setShowDeleteConfirm(false);
+         }).finally(() => setDeleting(false));
+       } else {
+         setShowDeleteConfirm(false);
+         setSelectedToDelete(null);
+       }
      } else {
        // fallback to delete horary flow
        handleConfirmDelete();
      }
    };
 
+  // compute context for delete modal so we can show proper message for faltas and replacements
+  const targetHorary = React.useMemo(() => {
+    if (!selectedToDelete) return null;
+    return horaries.find((h) => h.id === selectedToDelete.horary_id) || null;
+  }, [selectedToDelete, horaries]);
+
+  // render
   return (
     <div style={{ minHeight: '100vh', width: '100vw', boxSizing: 'border-box' }}>
       <Navbar title="Horarios" />
@@ -268,7 +337,6 @@ export default function Schedules() {
                   </button>
                   {/* consultorios dropdown */}
                   <select value={selectedConsultorioId ?? ''} onChange={(e) => setSelectedConsultorioId(e.target.value ? Number(e.target.value) : null)} style={{ background: '#222', color: '#fff', border: '1px solid #333', padding: '6px 8px', borderRadius: 6, marginLeft: 8 }}>
-                    <option value="">Todos</option>
                     {consultorios.map((c) => (
                       <option key={c.id} value={c.id}>{c.name || c.nombre || `Consultorio ${c.id}`}</option>
                     ))}
@@ -331,11 +399,12 @@ export default function Schedules() {
                   </button>
                 </div>
               </div>
-              <CalendarGrid weekStart={weekStart} weekDirection={weekDirection} horaries={horaries} onCreate={handleGridCreate} onDelete={handleGridDeleteRequest} onReplace={handleGridReplaceRequest} onDeleteReplacement={handleDeleteReplacementRequest} />
+              <CalendarGrid weekStart={weekStart} weekDirection={weekDirection} horaries={horaries} onCreate={handleGridCreate} onDelete={handleGridDeleteRequest} onReplace={handleGridReplaceRequest} onDeleteReplacement={handleDeleteReplacementRequest} onDeleteFalta={handleDeleteFaltaRequest} onActionRequest={handleGridActionRequest} />
             </>
           )}
         </div>
       </main>
+
       <CreateScheduleModal
         visible={showCreate}
         onClose={() => setShowCreate(false)}
@@ -344,6 +413,7 @@ export default function Schedules() {
         initialDayId={modalInitialDayId}
         initialStart={modalInitialStart}
         initialEnd={modalInitialEnd}
+        initialConsultorioId={selectedConsultorioId}
       />
 
       <UploadModal
@@ -405,21 +475,134 @@ export default function Schedules() {
          initialHoraryId={initialReplacementHoraryId}
        />
 
+      {/* modal to create falta */}
+      <CreateFaltaModal
+        visible={showFaltaModal}
+        onClose={() => setShowFaltaModal(false)}
+        onCreate={(p) => {
+          setCreatingFalta(true);
+          createFalta(p.horaryId, { reason: p.reason, occurrence_date: p.occurrence_date }).then((res) => {
+            // update local state: append falta to corresponding horary
+            const created = res?.data;
+            if (created) {
+              setHoraries((s) => s.map(h => h.id === p.horaryId ? { ...h, faltas: [...(Array.isArray(h.faltas) ? h.faltas : (h.faltas ? [h.faltas] : [])), created], falta: created } : h));
+            }
+            setShowFaltaModal(false);
+            toast.success('Falta creada', { autoClose: 1400 });
+          }).catch((e) => {
+            console.error('failed to create falta', e);
+            alert('No se pudo crear la falta.');
+          }).finally(() => setCreatingFalta(false));
+        }}
+        loading={creatingFalta}
+        horaries={horaries}
+        initialHoraryId={actionHorary?.id}
+        weekStart={weekStart}
+      />
+
       {/* Delete confirmation modal (reusable) */}
-      <ConfirmModal
-        visible={showDeleteConfirm}
-        title={selectedToDelete?._isReplacement ? 'Confirmar eliminación de reemplazo' : 'Confirmar eliminación'}
-        message={selectedToDelete?._isReplacement ? (
+      {(() => {
+        const isReplacement = !!selectedToDelete?._isReplacement;
+        const isFalta = !!selectedToDelete?._isFalta;
+        const parentHorary = isFalta ? horaries.find(h => h.id === selectedToDelete?.horary_id) : null;
+
+        const title = isReplacement ? 'Confirmar eliminación de reemplazo' : isFalta ? 'Confirmar eliminación de falta' : 'Confirmar eliminación';
+        const message = isReplacement ? (
           <div>¿Eliminar el reemplazo "{selectedToDelete?.name} {selectedToDelete?.last_name}" del horario seleccionado?</div>
+        ) : isFalta ? (
+          <div>¿Eliminar la falta "{selectedToDelete?.reason || 'sin motivo'}" para el horario <strong>{parentHorary?.title || parentHorary?.name || `${parentHorary ? (parentHorary.start_time || parentHorary.start) : '-'} - ${parentHorary ? (parentHorary.end_time || parentHorary.end) : '-'}`}</strong>?</div>
         ) : (
           <div>¿Eliminar el horario "{selectedToDelete?.title || selectedToDelete?.name || 'Horario'}" ({selectedToDelete?.start_time || selectedToDelete?.start} - {selectedToDelete?.end_time || selectedToDelete?.end})?</div>
-        )}
-        onCancel={() => { setShowDeleteConfirm(false); setSelectedToDelete(null); }}
-        onConfirm={handleConfirm}
-        loading={deleting}
-        cancelLabel="Cancelar"
-        confirmLabel={selectedToDelete?._isReplacement ? 'Eliminar reemplazo' : 'Eliminar'}
-      />
+        );
+        const confirmLabel = isReplacement ? 'Eliminar reemplazo' : isFalta ? 'Eliminar falta' : 'Eliminar';
+
+        return (
+          <ConfirmModal
+            visible={showDeleteConfirm}
+            title={title}
+            message={message}
+            onCancel={() => { setShowDeleteConfirm(false); setSelectedToDelete(null); }}
+            onConfirm={handleConfirm}
+            loading={deleting}
+            cancelLabel="Cancelar"
+            confirmLabel={confirmLabel}
+          />
+        );
+      })()}
+
+      {/* action choice modal (simple) */}
+      {showActionChoice && actionHorary && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1400 }}>
+          <div style={{ width: 380, background: '#1f1f1f', color: '#fff', borderRadius: 8, padding: 18, position: 'relative' }}> 
+            {/* close X top-right */}
+            <button
+              onClick={() => setShowActionChoice(false)}
+              aria-label="Cerrar"
+              style={{ position: 'absolute', right: 10, top: 10, background: 'transparent', border: 'none', color: '#bbb', cursor: 'pointer', fontSize: 18 }}
+            >
+              ×
+            </button>
+
+            <h3 style={{ marginTop: 0 }}>Acción</h3>
+            <div>Seleccioná una acción para el horario: <strong>{actionHorary.title || actionHorary.name || `${actionHorary.start_time || actionHorary.start} - ${actionHorary.end_time || actionHorary.end}`}</strong></div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+              <button
+                onClick={() => setShowActionChoice(false)}
+                onMouseEnter={() => setHoverActionCancel(true)}
+                onMouseLeave={() => setHoverActionCancel(false)}
+                style={{
+                  background: hoverActionCancel ? '#2a2a2a' : 'transparent',
+                  color: hoverActionCancel ? '#fff' : '#ddd',
+                  border: '1px solid #333',
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  transform: hoverActionCancel ? 'translateY(-4px)' : 'none',
+                  transition: 'all 140ms ease',
+                  boxShadow: hoverActionCancel ? '0 8px 20px rgba(0,0,0,0.28)' : 'none',
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={handleOpenReplacementFromChoice}
+                onMouseEnter={() => setHoverActionReplace(true)}
+                onMouseLeave={() => setHoverActionReplace(false)}
+                style={{
+                  background: hoverActionReplace ? '#2b8a3e' : '#32a84b',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  transform: hoverActionReplace ? 'translateY(-4px)' : 'none',
+                  transition: 'all 140ms ease',
+                  boxShadow: hoverActionReplace ? '0 12px 30px rgba(50,168,75,0.18)' : 'none',
+                }}
+              >
+                Crear reemplazo
+              </button>
+
+              <button
+                onClick={handleOpenFaltaFromChoice}
+                onMouseEnter={() => setHoverActionFalta(true)}
+                onMouseLeave={() => setHoverActionFalta(false)}
+                style={{
+                  background: hoverActionFalta ? '#b43f3f' : '#d64545',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  transform: hoverActionFalta ? 'translateY(-4px)' : 'none',
+                  transition: 'all 140ms ease',
+                  boxShadow: hoverActionFalta ? '0 12px 30px rgba(180,63,63,0.18)' : 'none',
+                }}
+              >
+                Crear falta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* react-toastify handles toasts globally (ToastContainer in main.tsx) */}
     </div>
