@@ -1,5 +1,5 @@
 import Card from '../components/cards/Card';
-import { FaRegMoneyBillAlt, FaClock } from 'react-icons/fa';
+import { FaRegMoneyBillAlt, FaClock, FaTools } from 'react-icons/fa';
 import Navbar from '../components/navbar/Navbar';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,6 +23,12 @@ export default function Home() {
               color="#1565C0"
               icon={<FaClock size={36} />}
               onClick={() => navigate('/horarios')}
+            />
+            <Card
+              title="Gestionar sistema"
+              color="#d2b48c"
+              icon={<FaTools size={36} />}
+              onClick={() => navigate('/admin')}
             />
           </div>
         </div>
