@@ -10,10 +10,18 @@ export default function AdminSidebar({ sections, active, onSelect }: { sections:
     // If using routing, navigate to dedicated admin pages
     if (id === 'consultorios') {
       navigate('/admin/consultorios');
-    } else {
-      // keep in Admin page
-      onSelect(id);
+      return;
     }
+    if (id === 'roles') {
+      navigate('/admin/roles');
+      return;
+    }
+    if (id === 'horarios') {
+      navigate('/admin/horarios');
+      return;
+    }
+    // keep in Admin page
+    onSelect(id);
   };
 
   return (
@@ -23,8 +31,8 @@ export default function AdminSidebar({ sections, active, onSelect }: { sections:
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {sections.map((s) => {
           const isHovered = hovered === s.id;
-          // mark active if route matches or sidebar active state
-          const isActive = location.pathname === '/admin/consultorios' ? s.id === 'consultorios' : active === s.id;
+          // mark active if route matches /admin/:section or sidebar active state
+          const isActive = location.pathname === `/admin/${s.id}` || active === s.id;
 
           return (
             <button

@@ -1,19 +1,18 @@
 import React from 'react';
 import AdminLayout from '../../layouts/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
-import { listConsultorios, updateConsultorio, deleteConsultorio, createConsultorio } from '../../api/consultoriosApi';
+import { listRoles, createRole, updateRole, deleteRole } from '../../api/rolesApi';
 import { FaPen, FaTimes, FaPlus } from 'react-icons/fa';
 import FormModal from '../../components/modals/FormModal';
 import ConfirmModal from '../../components/modals/ConfirmModal';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-export default function ConsultoriosAdminPage() {
-  const [consultorios, setConsultorios] = React.useState<any[]>([]);
+export default function RolesAdmin() {
+  const [roles, setRoles] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // modal / edit state
   const [editing, setEditing] = React.useState<any | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [hoverCreate, setHoverCreate] = React.useState(false);
@@ -24,22 +23,22 @@ export default function ConsultoriosAdminPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listConsultorios()
+    listRoles()
       .then((resp) => {
         if (cancelled) return;
         let data: any = resp.data;
-        if (data && data.consultorios) data = data.consultorios;
+        if (data && data.roles) data = data.roles;
         if (data && data.data) data = data.data;
         if (!Array.isArray(data)) {
           const arr = Object.values(data).find((v) => Array.isArray(v));
           if (Array.isArray(arr)) data = arr;
         }
-        setConsultorios(Array.isArray(data) ? data : []);
+        setRoles(Array.isArray(data) ? data : []);
       })
       .catch((err) => {
-        console.error('failed to load consultorios', err);
+        console.error('failed to load roles', err);
         if (cancelled) return;
-        setError('No se pudieron cargar los consultorios');
+        setError('No se pudieron cargar los roles');
       })
       .finally(() => {
         if (cancelled) return;
@@ -52,17 +51,14 @@ export default function ConsultoriosAdminPage() {
   }, []);
 
   const columns = React.useMemo(() => {
-    // put actions column at the end
-    if (!consultorios || consultorios.length === 0) return [{ key: 'id', label: 'ID' }, { key: 'name', label: 'Nombre' }, { key: 'direccion', label: 'Dirección' }, { key: '__actions', label: '' }];
-    const first = consultorios[0];
+    if (!roles || roles.length === 0) return [{ key: 'id', label: 'ID' }, { key: 'name', label: 'Nombre' }, { key: '__actions', label: '' }];
+    const first = roles[0];
     const keys = Object.keys(first);
     const cols = keys.map((k) => ({ key: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }));
     return cols.concat([{ key: '__actions', label: '' }]);
-  }, [consultorios]);
+  }, [roles]);
 
-  const handleEdit = (row: any) => {
-    setEditing(row);
-  };
+  const handleEdit = (row: any) => setEditing(row);
 
   const renderCell = (row: any, key: string) => {
     if (key === '__actions') {
@@ -77,17 +73,15 @@ export default function ConsultoriosAdminPage() {
         </div>
       );
     }
-
-    return undefined; // DataTable will fallback to default rendering
+    return undefined;
   };
 
-  // perform delete after confirmation
   const performDelete = async () => {
     if (!deleting) return;
     setSaving(true);
     try {
-      await deleteConsultorio(deleting.id);
-      setConsultorios((prev) => prev.filter((r) => r.id !== deleting.id));
+      await deleteRole(deleting.id);
+      setRoles((prev) => prev.filter((r) => r.id !== deleting.id));
       setDeleting(null);
       toast.success('Eliminado con éxito', { autoClose: 1000, position: 'top-right' });
     } catch (err) {
@@ -98,7 +92,6 @@ export default function ConsultoriosAdminPage() {
     }
   };
 
-  // form modal state bindings
   const [fieldName, setFieldName] = React.useState('');
   const [formErrors, setFormErrors] = React.useState<{ name?: string }>({});
 
@@ -120,9 +113,8 @@ export default function ConsultoriosAdminPage() {
     setSaving(true);
     try {
       const payload: any = { name: fieldName };
-      const resp = await updateConsultorio(editing.id, payload);
-      // update locally
-      setConsultorios((prev) => prev.map((r) => (r.id === editing.id ? (resp.data && resp.data.consultorio) || { ...r, ...payload } : r)));
+      const resp = await updateRole(editing.id, payload);
+      setRoles((prev) => prev.map((r) => (r.id === editing.id ? (resp.data && resp.data.role) || { ...r, ...payload } : r)));
       setEditing(null);
       toast.success('Editado con éxito', { autoClose: 1000, position: 'top-right' });
     } catch (err) {
@@ -133,7 +125,6 @@ export default function ConsultoriosAdminPage() {
     }
   };
 
-  // create modal handlers
   const openCreate = () => {
     setCreating(true);
     setFieldName('');
@@ -151,24 +142,19 @@ export default function ConsultoriosAdminPage() {
     setSaving(true);
     try {
       const payload: any = { name: fieldName };
-      const resp = await createConsultorio(payload);
-      // try to extract created record from response
-      let created = resp.data && (resp.data.consultorio || resp.data);
+      const resp = await createRole(payload);
+      let created = resp.data && (resp.data.role || resp.data);
       if (!created) {
-        // if API returns object with data array
         const maybe = Object.values(resp.data || {}).find((v: any) => v && v.id);
         if (maybe) created = maybe;
       }
-      if (!created) {
-        // fallback: build object
-        created = { id: Math.max(0, ...consultorios.map((c) => c.id || 0)) + 1, ...payload };
-      }
-      setConsultorios((prev) => [created, ...prev]);
+      if (!created) created = { id: Math.max(0, ...roles.map((c) => c.id || 0)) + 1, ...payload };
+      setRoles((prev) => [created, ...prev]);
       setCreating(false);
       toast.success('Creado con éxito', { autoClose: 1000, position: 'top-right' });
     } catch (err) {
       console.error('create failed', err);
-      alert('No se pudo crear consultorio');
+      alert('No se pudo crear rol');
     } finally {
       setSaving(false);
     }
@@ -178,7 +164,7 @@ export default function ConsultoriosAdminPage() {
     <AdminLayout>
       <div style={{ padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Consultorios</h2>
+          <h2>Roles</h2>
           <div>
             <button
               onClick={openCreate}
@@ -199,21 +185,21 @@ export default function ConsultoriosAdminPage() {
                 transition: 'transform 260ms cubic-bezier(0.2,0.8,0.2,1), box-shadow 260ms ease',
               }}
             >
-              <FaPlus /> Crear consultorio
+              <FaPlus /> Crear rol
             </button>
           </div>
         </div>
 
-        {loading && <p>Cargando consultorios...</p>}
+        {loading && <p>Cargando roles...</p>}
         {error && <p style={{ color: 'red' }}>{error}</p>}
 
         {!loading && !error && (
-          <DataTable columns={columns} data={consultorios} renderCell={renderCell} minWidth={1200} />
+          <DataTable columns={columns} data={roles} renderCell={renderCell} minWidth={800} />
         )}
 
         <FormModal
           isOpen={!!editing}
-          title="Editar Consultorio"
+          title="Editar Rol"
           fields={[
             { label: 'ID', value: editing?.id?.toString() || '', onChange: () => {}, readOnly: true },
             { label: 'Nombre', value: fieldName, onChange: setFieldName, error: formErrors.name },
@@ -225,10 +211,8 @@ export default function ConsultoriosAdminPage() {
 
         <FormModal
           isOpen={creating}
-          title="Crear Consultorio"
-          fields={[
-            { label: 'Nombre', value: fieldName, onChange: setFieldName, error: formErrors.name },
-          ]}
+          title="Crear Rol"
+          fields={[{ label: 'Nombre', value: fieldName, onChange: setFieldName, error: formErrors.name }]}
           onCancel={handleCreateCancel}
           onSubmit={handleCreateSubmit}
           submitLabel={saving ? 'Creando...' : 'Crear'}
@@ -236,8 +220,8 @@ export default function ConsultoriosAdminPage() {
 
         <ConfirmModal
           visible={!!deleting}
-          title="Eliminar consultorio"
-          message={deleting ? `¿Eliminar consultorio ${deleting.id} — ${deleting.name || ''}?` : '¿Eliminar?' }
+          title="Eliminar rol"
+          message={deleting ? `¿Eliminar rol ${deleting.id} — ${deleting.name || ''}?` : '¿Eliminar?'}
           onCancel={() => setDeleting(null)}
           onConfirm={performDelete}
           loading={saving}

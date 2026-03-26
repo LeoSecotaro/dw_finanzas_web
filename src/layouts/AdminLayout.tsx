@@ -17,7 +17,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <Navbar title="Administrador" />
       <div style={{ display: 'flex', marginTop: 18 }}>
         <AdminSidebar sections={sections} active={''} onSelect={() => {}} />
-        <main style={{ flex: 1, padding: 18 }}>
+        <main style={{ flex: 1, padding: 18, paddingLeft: 260, boxSizing: 'border-box', overflowX: 'auto', position: 'relative', zIndex: 1 }}>
           {children}
         </main>
       </div>
