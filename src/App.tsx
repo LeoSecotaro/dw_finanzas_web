@@ -8,6 +8,8 @@ import ConsultoriosAdminPage from './pages/admin/ConsultoriosAdminPage'
 import RolesAdmin from './pages/admin/RolesAdmin'
 import HorariosAdmin from './pages/admin/HorariosAdmin'
 import WorkerHoraryDetail from './pages/admin/WorkerHoraryDetail'
+import UsuariosAdmin from './pages/admin/UsuariosAdmin'
+import ObrasSocialesAdmin from './pages/admin/ObrasSocialesAdmin'
 
 function App() {
   return (
@@ -20,6 +22,8 @@ function App() {
         <Route path="/horarios" element={<Schedules />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/consultorios" element={<ConsultoriosAdminPage />} />
+        <Route path="/admin/usuarios" element={<UsuariosAdmin />} />
+        <Route path="/admin/obras_sociales" element={<ObrasSocialesAdmin />} />
         <Route path="/admin/roles" element={<RolesAdmin />} />
         <Route path="/admin/horarios" element={<HorariosAdmin />} />
         <Route path="/admin/horarios/:id" element={<WorkerHoraryDetail />} />

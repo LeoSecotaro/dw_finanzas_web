@@ -9,6 +9,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { id: 'horarios', label: 'Horarios' },
     { id: 'consultorios', label: 'Consultorios' },
     { id: 'roles', label: 'Roles' },
+    { id: 'obras_sociales', label: 'Obras Sociales' },
   ];
 
   // This layout does not manage active state; pages using it can render content centered

@@ -8,8 +8,16 @@ export default function AdminSidebar({ sections, active, onSelect }: { sections:
 
   const handleClick = (id: string) => {
     // If using routing, navigate to dedicated admin pages
+    if (id === 'usuarios') {
+      navigate('/admin/usuarios');
+      return;
+    }
     if (id === 'consultorios') {
       navigate('/admin/consultorios');
+      return;
+    }
+    if (id === 'obras_sociales') {
+      navigate('/admin/obras_sociales');
       return;
     }
     if (id === 'roles') {
