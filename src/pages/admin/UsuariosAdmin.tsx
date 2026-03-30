@@ -2,6 +2,7 @@ import React from 'react';
 import AdminLayout from '../../layouts/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import { listUsers, createUser, updateUser, deleteUser } from '../../api/usersApi';
+import { listRoles } from '../../api/rolesApi';
 import { FaPen, FaTimes } from 'react-icons/fa';
 import FormModal from '../../components/modals/FormModal';
 import ConfirmModal from '../../components/modals/ConfirmModal';
@@ -30,6 +31,9 @@ export default function UsuariosAdmin() {
   const [createEmail, setCreateEmail] = React.useState('');
   const [createApodo, setCreateApodo] = React.useState('');
 
+  // cached roles for dropdown
+  const [rolesList, setRolesList] = React.useState<any[]>([]);
+
   React.useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -56,6 +60,19 @@ export default function UsuariosAdmin() {
       }
     };
     load();
+    // load roles list for dropdowns
+    const loadRoles = async () => {
+      try {
+        const rr = await listRoles();
+        const d = rr.data || {};
+        let list = Array.isArray(d.roles) ? d.roles : (Array.isArray(d) ? d : []);
+        if (!Array.isArray(list)) list = [];
+        setRolesList(list);
+      } catch (err) {
+        console.error('failed to load roles', err);
+      }
+    };
+    loadRoles();
     return () => { cancelled = true; };
   }, [q, page, perPage]);
 
@@ -80,9 +97,37 @@ export default function UsuariosAdmin() {
       );
     }
 
-    // render roles array nicely
-    if (key === 'roles' && Array.isArray(row.roles)) {
-      return <span>{row.roles.map((r: any) => r.name).join(', ')}</span>;
+    // render roles array as a dropdown to change role
+    if (key === 'roles') {
+      const currentRoleId = Array.isArray(row.roles) && row.roles.length > 0 ? row.roles[0].id : '';
+      return (
+        <select
+          value={currentRoleId || ''}
+          onChange={async (e) => {
+            const val = e.target.value;
+            const newRoleId = val ? Number(val) : null;
+            setSaving(true);
+            try {
+              // try update with role_ids (common pattern), fallback will be handled server-side
+              const payload: any = newRoleId ? { role_ids: [newRoleId] } : { role_ids: [] };
+              const resp = await updateUser(row.id, payload);
+              // update local state from response if provided
+              const updated = resp.data && (resp.data.user || resp.data);
+              setUsers(prev => prev.map(u => u.id === row.id ? (updated ? updated : { ...u, roles: newRoleId ? [{ id: newRoleId, name: (rolesList.find(r => r.id === newRoleId) || {}).name }] : [] }) : u));
+              toast.success('Rol actualizado', { autoClose: 1000, position: 'top-right' });
+            } catch (err) {
+              console.error('role update failed', err);
+              toast.error('No se pudo actualizar el rol');
+            } finally {
+              setSaving(false);
+            }
+          }}
+          style={{ padding: 6 }}
+        >
+          <option value="">—</option>
+          {rolesList.map((r:any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+      );
     }
 
     const val = row?.[key];
@@ -94,7 +139,7 @@ export default function UsuariosAdmin() {
     if (!editing) return;
     setSaving(true);
     try {
-      const payload: any = { name: editing.name, email: editing.email };
+      const payload: any = { email: editing.email };
       const resp = await updateUser(editing.id, payload);
       setUsers(prev => prev.map(u => u.id === editing.id ? (resp.data && resp.data.user) || { ...u, ...payload } : u));
       setEditing(null);
@@ -158,7 +203,7 @@ export default function UsuariosAdmin() {
           </>
         )}
 
-        <FormModal isOpen={!!editing} title="Editar Usuario" fields={[{ label: 'ID', value: editing?.id?.toString() || '', onChange: () => {}, readOnly: true }, { label: 'Nombre', value: editing?.name || '', onChange: (v) => setEditing((prev:any) => ({ ...prev, name: v })), error: undefined }, { label: 'Email', value: editing?.email || '', onChange: (v) => setEditing((prev:any) => ({ ...prev, email: v })), error: undefined }]} onCancel={() => setEditing(null)} onSubmit={handleEditSubmit} submitLabel={saving ? 'Guardando...' : 'Guardar'} />
+        <FormModal isOpen={!!editing} title="Editar Usuario" fields={[{ label: 'ID', value: editing?.id?.toString() || '', onChange: () => {}, readOnly: true }, { label: 'Email', value: editing?.email || '', onChange: (v) => setEditing((prev:any) => ({ ...prev, email: v })), error: undefined }]} onCancel={() => setEditing(null)} onSubmit={handleEditSubmit} submitLabel={saving ? 'Guardando...' : 'Guardar'} />
 
         <FormModal isOpen={creating} title="Crear Usuario" fields={[{ label: 'Nombre', value: createName, onChange: setCreateName, error: undefined }, { label: 'Email', value: createEmail, onChange: setCreateEmail, error: undefined }, { label: 'Apodo', value: createApodo, onChange: setCreateApodo, error: undefined }]} onCancel={handleCreateCancel} onSubmit={handleCreateSubmit} submitLabel={saving ? 'Creando...' : 'Crear'} />
 

@@ -21,6 +21,7 @@ function App() {
         <Route path="/finance" element={<Finance />} />
         <Route path="/horarios" element={<Schedules />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/admin/inicio" element={<Admin />} />
         <Route path="/admin/consultorios" element={<ConsultoriosAdminPage />} />
         <Route path="/admin/usuarios" element={<UsuariosAdmin />} />
         <Route path="/admin/obras_sociales" element={<ObrasSocialesAdmin />} />

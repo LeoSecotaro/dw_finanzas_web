@@ -7,6 +7,10 @@ export default function AdminSidebar({ sections, active, onSelect }: { sections:
   const location = useLocation();
 
   const handleClick = (id: string) => {
+    if (id === 'inicio') {
+      navigate('/admin/inicio');
+      return;
+    }
     // If using routing, navigate to dedicated admin pages
     if (id === 'usuarios') {
       navigate('/admin/usuarios');

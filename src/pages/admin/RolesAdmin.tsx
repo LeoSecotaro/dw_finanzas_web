@@ -194,7 +194,7 @@ export default function RolesAdmin() {
         {error && <p style={{ color: 'red' }}>{error}</p>}
 
         {!loading && !error && (
-          <DataTable columns={columns} data={roles} renderCell={renderCell} minWidth={800} />
+          <DataTable columns={columns} data={roles} renderCell={renderCell} minWidth={1400} />
         )}
 
         <FormModal

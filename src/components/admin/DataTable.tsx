@@ -1,4 +1,5 @@
 import React from 'react';
+import { translateColumn, humanizeKey } from '../../utils/columnTranslations';
 
 export default function DataTable<T>({ columns, data, renderCell, minWidth = 1000 }: { columns: { key: string; label: string }[]; data: T[]; renderCell?: (row: T, key: string) => React.ReactNode; minWidth?: number }) {
   const [hoveredRow, setHoveredRow] = React.useState<number | null>(null);
@@ -38,9 +39,10 @@ export default function DataTable<T>({ columns, data, renderCell, minWidth = 100
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: minWidth, color: '#000' }}>
         <thead>
           <tr>
-            {columns.map(c => (
-              <th key={c.key} style={{ textAlign: 'left', padding: 12, background: '#bbdefb', color: '#000' }}>{c.label}</th>
-            ))}
+            {columns.map(c => {
+              const translated = translateColumn(c.key) || c.label || humanizeKey(c.key);
+              return <th key={c.key} style={{ textAlign: 'left', padding: 12, background: '#bbdefb', color: '#000' }}>{translated}</th>;
+            })}
           </tr>
         </thead>
         <tbody>

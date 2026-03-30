@@ -3,29 +3,41 @@ import Navbar from '../../components/navbar/Navbar';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import DataTable from '../../components/admin/DataTable';
 import { listConsultorios } from '../../api/consultoriosApi';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function Admin() {
   const sections = [
-    { id: 'dashboard', label: 'Inicio' },
+    { id: 'inicio', label: 'Inicio' },
     { id: 'usuarios', label: 'Usuarios' },
     { id: 'horarios', label: 'Horarios' },
     { id: 'consultorios', label: 'Consultorios' },
     { id: 'roles', label: 'Roles' },
   ];
 
-  const [active, setActive] = React.useState('dashboard');
+  const [active, setActive] = React.useState('inicio');
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // keep active tab in sync with URL and only redirect when user is at /admin
+  React.useEffect(() => {
+    const parts = location.pathname.split('/').filter(Boolean);
+    // parts like ['admin', 'inicio'] -> take second segment
+    const seg = parts[1] || 'inicio';
+    setActive(seg);
+    if (location.pathname === '/admin') {
+      navigate('/admin/inicio', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   return (
     <div style={{ padding: 18 }}>
       <Navbar title="Administrador" />
 
       <div style={{ display: 'flex', gap: 18, marginTop: 18 }}>
-        <AdminSidebar sections={sections} active={active} onSelect={(id) => { setActive(id); }} />
+        <AdminSidebar sections={sections} active={active} onSelect={(id) => { setActive(id); navigate(`/admin/${id}`); }} />
 
         <div style={{ flex: 1 }}>
-          {active === 'dashboard' && (
+          {active === 'inicio' && (
             <div>
               <h3>Panel de administración</h3>
               <p style={{ color: '#666' }}>Seleccione una sección en la barra lateral para gestionar datos.</p>

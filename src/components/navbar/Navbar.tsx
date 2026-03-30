@@ -2,7 +2,7 @@ import React from 'react';
 import styles from './Navbar.module.css';
 import apiClient from '../../api/apiClient';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FaArrowLeft } from 'react-icons/fa';
+import { FaArrowLeft, FaHome } from 'react-icons/fa';
 
 type NavbarProps = {
   title?: string;
@@ -33,6 +33,11 @@ export default function Navbar({ title = 'App' }: NavbarProps) {
       {showBack && (
         <button className={styles.backButton} onClick={() => navigate(-1)} aria-label="Volver">
           <FaArrowLeft size={18} />
+        </button>
+      )}
+      {showBack && (
+        <button className={styles.homeButton} onClick={() => navigate('/home')} aria-label="Ir al inicio">
+          <FaHome size={16} />
         </button>
       )}
       <div className={styles.title}>{title}</div>

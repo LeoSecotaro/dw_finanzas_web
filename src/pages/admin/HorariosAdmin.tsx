@@ -19,36 +19,69 @@ export default function HorariosAdmin() {
   const [deleting, setDeleting] = React.useState<any | null>(null);
   const [saving, setSaving] = React.useState(false);
 
+  // server-side list controls
+  const [q, setQ] = React.useState('');
+  const [page, setPage] = React.useState(1);
+  const [perPage, setPerPage] = React.useState(10);
+  const [totalPages, setTotalPages] = React.useState(1);
+  const [totalCount, setTotalCount] = React.useState(0);
+
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    listHorarios()
-      .then((resp) => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params: Record<string, any> = { page, per_page: perPage };
+        if (q) params.q = q;
+        const resp = await listHorarios(params);
         if (cancelled) return;
-        let data: any = resp.data;
+        let data: any = resp.data || {};
         if (data && data.horarios) data = data.horarios;
         if (data && data.data) data = data.data;
         if (!Array.isArray(data)) {
-          const arr = Object.values(data).find((v) => Array.isArray(v));
+          const arr = Object.values(data || {}).find((v) => Array.isArray(v));
           if (Array.isArray(arr)) data = arr;
         }
-        setHorarios(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => {
+        const list = Array.isArray(data) ? data : [];
+        setHorarios(list);
+
+        const meta = (resp.data && (resp.data.meta || {})) || {};
+        const headers = resp.headers || {};
+        // header-based totals (common when using pagination gems that set headers)
+        const headerTotal = headers['x-total-count'] ?? headers['x-total'] ?? headers['x-total_count'] ?? null;
+        const headerTotalPages = headers['x-total-pages'] ?? headers['x-total-pages-count'] ?? headers['x-total_pages'] ?? null;
+
+        const totalRaw = headerTotal ?? resp.data?.total_count ?? meta.total_count ?? resp.data?.total_entries ?? resp.data?.total ?? null;
+        const totalNum = totalRaw != null && !Number.isNaN(Number(totalRaw)) ? Number(totalRaw) : null;
+        const total = totalNum != null ? totalNum : (Array.isArray(resp.data) ? resp.data.length : (list.length || 0));
+
+        const explicitPagesRaw = headerTotalPages ?? resp.data?.total_pages ?? meta.total_pages ?? resp.data?.pages ?? resp.data?.total_pages_count ?? null;
+        const explicitPages = explicitPagesRaw != null && !Number.isNaN(Number(explicitPagesRaw)) ? Number(explicitPagesRaw) : null;
+
+        // compute pages using the UI-selected perPage (avoid trusting server per-page headers)
+        const pages = explicitPages != null ? explicitPages : (total ? Math.max(1, Math.ceil(total / perPage)) : 1);
+        setTotalPages(pages);
+
+        // prefer current_page if backend provided it (body or headers)
+        const currentRaw = resp.data?.current_page ?? meta.current_page ?? resp.data?.page ?? headers['x-page'] ?? null;
+        const current = currentRaw != null && !Number.isNaN(Number(currentRaw)) ? Number(currentRaw) : page;
+        // clamp current to valid range
+        const clamped = Math.min(Math.max(1, current), pages || 1);
+        setPage(clamped);
+        setTotalCount(total);
+      } catch (err) {
         console.error('failed to load horarios', err);
         if (cancelled) return;
         setError('No se pudieron cargar los horarios');
-      })
-      .finally(() => {
+      } finally {
         if (cancelled) return;
         setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
+      }
     };
-  }, []);
+    load();
+    return () => { cancelled = true; };
+  }, [q, page, perPage]);
 
   const columns = React.useMemo(() => {
     if (!horarios || horarios.length === 0) return [{ key: 'id', label: 'ID' }, { key: 'name', label: 'Nombre' }, { key: '__actions', label: '' }];
@@ -142,13 +175,37 @@ export default function HorariosAdmin() {
       <div style={{ padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>Horarios</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input placeholder="Buscar..." value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #333', background: '#2a2a2a', color: '#fff' }} />
+          </div>
         </div>
 
         {loading && <p>Cargando horarios...</p>}
         {error && <p style={{ color: 'red' }}>{error}</p>}
 
         {!loading && !error && (
-          <DataTable columns={columns} data={horarios} renderCell={renderCell} minWidth={800} />
+          <>
+            {/* if backend returned full list without pagination, slice client-side to avoid huge table */}
+            {(() => {
+              const useClientSlice = (totalCount === (horarios?.length || 0)) && (horarios.length > perPage);
+              const displayed = useClientSlice ? horarios.slice((page - 1) * perPage, page * perPage) : horarios;
+              return <DataTable columns={columns} data={displayed} renderCell={renderCell} minWidth={1400} />;
+            })()}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+              <div style={{ color: '#666' }}>Mostrando {((totalCount === (horarios?.length || 0)) && (horarios.length > perPage) ? Math.min(perPage, horarios.length - (page - 1) * perPage) : horarios.length)} de {totalCount}</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <PageButton disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Anterior</PageButton>
+                <span>Página {page} / {totalPages}</span>
+                <PageButton disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Siguiente</PageButton>
+                <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }} style={{ padding: 6 }}>
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                </select>
+              </div>
+            </div>
+          </>
         )}
 
         <FormModal
@@ -177,5 +234,29 @@ export default function HorariosAdmin() {
         <ToastContainer position="top-right" autoClose={1000} hideProgressBar newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
       </div>
     </AdminLayout>
+  );
+}
+
+// Small helper component for styled pagination buttons
+function PageButton({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: '6px 10px',
+        background: disabled ? '#9bbefb' : '#1677ff',
+        color: '#fff',
+        border: 'none',
+        borderRadius: 6,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transform: 'none',
+        transition: 'transform 160ms ease, box-shadow 160ms ease',
+      }}
+      onMouseEnter={(e) => { if (!disabled) (e.currentTarget.style.transform = 'translateY(-4px)'); }}
+      onMouseLeave={(e) => { (e.currentTarget.style.transform = 'none'); }}
+    >
+      {children}
+    </button>
   );
 }

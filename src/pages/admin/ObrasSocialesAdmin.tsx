@@ -70,7 +70,8 @@ export default function ObrasSocialesAdmin() {
   const columns = React.useMemo(() => {
     if (!items || items.length === 0) return [{ key: 'id', label: 'ID' }, { key: 'name', label: 'Nombre' }, { key: '__actions', label: '' }];
     const first = items[0];
-    const exclude = ['created_at', 'updated_at'];
+    // exclude keys we don't want to show in the table
+    const exclude = ['created_at', 'updated_at', 'code', 'notes'];
     const keys = Object.keys(first).filter(k => !exclude.includes(k));
     const cols = keys.map(k => ({ key: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
     return cols.concat([{ key: '__actions', label: '' }]);
@@ -163,7 +164,7 @@ export default function ObrasSocialesAdmin() {
 
         {!loading && !error && (
           <>
-            <DataTable columns={columns} data={items} renderCell={renderCell} minWidth={900} />
+            <DataTable columns={columns} data={items} renderCell={renderCell} minWidth={1400} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
               <div style={{ color: '#666' }}>Mostrando {items.length} de {totalCount}</div>
