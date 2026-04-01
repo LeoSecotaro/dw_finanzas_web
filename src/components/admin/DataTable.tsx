@@ -41,7 +41,8 @@ export default function DataTable<T>({ columns, data, renderCell, minWidth = 100
           <tr>
             {columns.map(c => {
               const translated = translateColumn(c.key) || c.label || humanizeKey(c.key);
-              return <th key={c.key} style={{ textAlign: 'left', padding: 12, background: '#bbdefb', color: '#000' }}>{translated}</th>;
+              const thStyle: React.CSSProperties = { padding: 12, background: '#bbdefb', color: '#000', textAlign: c.key === '__actions' ? 'right' : 'left' };
+              return <th key={c.key} style={thStyle}>{translated}</th>;
             })}
           </tr>
         </thead>
@@ -62,14 +63,15 @@ export default function DataTable<T>({ columns, data, renderCell, minWidth = 100
                 }}
               >
                 {columns.map(c => {
-                  const custom = renderCell ? renderCell(row, c.key) : undefined;
+                   const custom = renderCell ? renderCell(row, c.key) : undefined;
                   const cellContent = custom !== undefined && custom !== null ? custom : renderValue(row, c.key);
+                  const tdStyle: React.CSSProperties = { padding: 10, color: '#000', textAlign: c.key === '__actions' ? 'right' : 'left' };
                   return (
-                    <td key={c.key} style={{ padding: 10, color: '#000' }}>
+                    <td key={c.key} style={tdStyle}>
                       {cellContent}
                     </td>
                   );
-                })}
+                 })}
               </tr>
             );
           })}

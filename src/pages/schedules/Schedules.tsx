@@ -63,11 +63,31 @@ export default function Schedules() {
       const params: Record<string, any> = {};
       if (selectedConsultorioId) params.consultorio_id = selectedConsultorioId;
       const r = await listWorkerHoraries(params);
+      // normalize response: backend may return either an array of horaries or a months grouping { months: [{ month, current, start_date, end_date, count, horarios: [...] }, ...] }
+      let list = r.data || [];
+      // if backend returns months grouping, flatten to a single list of horarios (preserve month info on each item if available)
+      if (r.data && Array.isArray(r.data.months)) {
+        const months = r.data.months as any[];
+        const flattened: any[] = [];
+        months.forEach((m) => {
+          const hs = Array.isArray(m.horarios) ? m.horarios : [];
+          // attach month metadata to each horary for debug/UI if needed
+          hs.forEach((h: any) => { if (m.month) h._month = m.month; if (typeof m.current !== 'undefined') h._month_current = m.current; flattened.push(h); });
+        });
+        list = flattened;
+        // also attach simple totals to the response object so downstream logic can read totals
+        // prefer explicit counts from months if provided
+        try {
+          const totalFromMonths = months.reduce((acc, m) => acc + (Number(m.count) || 0), 0);
+          // override r.data for downstream meta logic
+          (r as any).__flattened_total = totalFromMonths || flattened.length;
+        } catch (e) { /* ignore */ }
+      }
       // ignore this response if selected consultorio changed while fetching
       if (usedConsultorio !== selectedConsultorioId) {
         return;
       }
-      const list = r.data || [];
+      // keep existing logic but use 'list' variable
       const needsDetails = list.some((h: any) => typeof h.replacements === 'undefined');
       if (needsDetails && list.length) {
         try {

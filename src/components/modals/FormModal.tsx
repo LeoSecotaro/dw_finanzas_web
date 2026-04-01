@@ -36,7 +36,7 @@ export default function FormModal({ isOpen, title = 'Editar', fields, onCancel, 
   if (!isOpen) return null;
 
   return (
-    <div onClick={handleBackdrop} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
+    <div onClick={handleBackdrop} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20010 }}>
       <div role="dialog" aria-modal="true" aria-label={title} style={{ width: 720, maxWidth: '95%', background: '#fff', borderRadius: 8, padding: 18, boxSizing: 'border-box', boxShadow: '0 10px 40px rgba(0,0,0,0.4)', position: 'relative' }}>
         <button
           onClick={onCancel}

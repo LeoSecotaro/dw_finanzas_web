@@ -41,6 +41,9 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
   // control per-block entrance animation (staggered)
   const [blocksEntering, setBlocksEntering] = useState(true);
 
+  // internal modal state to show details of a selected horary when user clicks a block
+  const [selectedHorary, setSelectedHorary] = useState<any | null>(null);
+
   const parseTime = (t: string) => {
     if (!t) return 0;
     // try to extract HH:MM from ISO datetime like 2000-01-01T14:00:00.000Z or plain '14:00'
@@ -251,6 +254,10 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                   // compute the actual calendar date for this column
                   const ms = 24 * 60 * 60 * 1000;
                   const columnDate = weekStart ? new Date(weekStart.getTime() + dayIdx * ms) : null;
+                  // normalize column date to midnight and determine if it's in the past
+                  const columnDateNormalized = columnDate ? new Date(columnDate.getFullYear(), columnDate.getMonth(), columnDate.getDate()) : null;
+                  const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+                  const columnIsPast = columnDateNormalized ? (columnDateNormalized < todayDate) : false;
 
                   const dayHoraries = (horaries || []).filter((hr: any) => {
                     const hrDayId = hr.day_id ?? undefined;
@@ -398,11 +405,15 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                             transitionDelay: `${entryDelay}ms`,
                             transform: appliedTransform,
                             opacity: isEntered ? 1 : 0,
+                           // grey-out past dates
+                           ...(columnIsPast ? { filter: 'grayscale(1) contrast(0.9)', opacity: 1 } : {}),
                            }}
                           title={`${title}${subtitle ? ' — ' + subtitle : ''} (${hr.start_time || hr.start} - ${hr.end_time || hr.end})`}
-                          onClick={(e) => { e.stopPropagation(); // prefer actionRequest if provided (open choice modal), else fallback to onReplace
+                          onClick={(e) => { e.stopPropagation();
+                            // prefer parent handler if provided
                             if (onActionRequest) return onActionRequest(hr);
-                            if (onReplace) return onReplace(hr);
+                            // otherwise open internal details modal so user can inspect and take actions
+                            setSelectedHorary(hr);
                           }}
                         >
                            {/* delete X button top-right inside block */}
@@ -450,6 +461,88 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
           ))}
         </div>
       </div>
+
+      {/* Internal details modal for a selected horary (shown when parent doesn't handle onActionRequest) */}
+      {selectedHorary && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setSelectedHorary(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 520, maxWidth: '95%', background: '#1f1f1f', color: '#fff', borderRadius: 8, padding: 18, boxSizing: 'border-box', boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{selectedHorary.title || selectedHorary.name || selectedHorary.note || 'Horario'}</div>
+              <button onClick={() => setSelectedHorary(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }} aria-label="Cerrar">×</button>
+            </div>
+
+            <div style={{ fontSize: 13, color: '#ddd', marginBottom: 12 }}>
+              <div><strong>Inicio:</strong> {(selectedHorary.start_date ? String(selectedHorary.start_date) + ' ' : '')}{selectedHorary.start_time || selectedHorary.start || '-'}</div>
+              <div><strong>Fin:</strong> {(selectedHorary.end_date ? String(selectedHorary.end_date) + ' ' : '')}{selectedHorary.end_time || selectedHorary.end || '-'}</div>
+              {selectedHorary.day && <div><strong>Día:</strong> {String(selectedHorary.day)}</div>}
+              {selectedHorary.apodo && <div><strong>Apodo:</strong> {String(selectedHorary.apodo)}</div>}
+              {selectedHorary.user?.apodo && <div><strong>Usuario:</strong> {selectedHorary.user.apodo}</div>}
+              {selectedHorary.worker?.apodo && <div><strong>Trabajador:</strong> {selectedHorary.worker.apodo}</div>}
+            </div>
+
+            {/* show replacement / falta info if present */}
+            {((selectedHorary.replacements && selectedHorary.replacements.length) || selectedHorary.replacement) && (
+              <div style={{ marginBottom: 10, color: '#ffdede' }}>
+                <strong>Reemplazos:</strong>
+                <div style={{ marginTop: 6 }}>
+                  {(Array.isArray(selectedHorary.replacements) ? selectedHorary.replacements : [selectedHorary.replacement]).map((r: any, i: number) => (
+                    <div key={i} style={{ padding: '6px 8px', background: '#2b2b2b', borderRadius: 6, marginTop: 6 }}>
+                      <div>{r.name || r.apodo || r.user_name || JSON.stringify(r)}</div>
+                      {r.occurrence_date && <div style={{ fontSize: 12, color: '#bbb' }}>{r.occurrence_date}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {((selectedHorary.faltas && selectedHorary.faltas.length) || selectedHorary.falta) && (
+              <div style={{ marginBottom: 10, color: '#ffdede' }}>
+                <strong>Faltas:</strong>
+                <div style={{ marginTop: 6 }}>
+                  {(Array.isArray(selectedHorary.faltas) ? selectedHorary.faltas : [selectedHorary.falta]).map((f: any, i: number) => (
+                    <div key={i} style={{ padding: '6px 8px', background: '#2b2b2b', borderRadius: 6, marginTop: 6 }}>
+                      <div>{f.reason || f.motivo || JSON.stringify(f)}</div>
+                      {f.occurrence_date && <div style={{ fontSize: 12, color: '#bbb' }}>{f.occurrence_date}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setSelectedHorary(null)} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #333', background: 'transparent', color: '#fff', cursor: 'pointer' }}>Cerrar</button>
+              {onReplace && (
+                <button onClick={() => { if (onReplace) onReplace(selectedHorary); setSelectedHorary(null); }} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: '#2b8aef', color: '#fff', cursor: 'pointer' }}>Reemplazar / Editar</button>
+              )}
+              {onDelete && (
+                <button onClick={() => {
+                  // prefer deleting falta/replacement if present
+                  const reps = Array.isArray(selectedHorary.replacements) ? selectedHorary.replacements : (selectedHorary.replacements ? [selectedHorary.replacements] : (selectedHorary.replacement ? [selectedHorary.replacement] : []));
+                  const faltas = Array.isArray(selectedHorary.faltas) ? selectedHorary.faltas : (selectedHorary.faltas ? [selectedHorary.faltas] : (selectedHorary.falta ? [selectedHorary.falta] : []));
+                  if (faltas && faltas.length && onDeleteFalta) {
+                    onDeleteFalta(faltas[0], selectedHorary.id);
+                  } else if (reps && reps.length && onDeleteReplacement) {
+                    onDeleteReplacement(reps[0], selectedHorary.id);
+                  } else if (onDelete) {
+                    onDelete(selectedHorary);
+                  }
+                  setSelectedHorary(null);
+                }} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: '#d64545', color: '#fff', cursor: 'pointer' }}>Eliminar</button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

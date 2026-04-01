@@ -31,6 +31,14 @@ const DICT: Record<string, string> = {
   faltasCountMonth: 'Faltas (mes)',
   replacementsCountWeek: 'Reemplazos (semana)',
   replacementsCountMonth: 'Reemplazos (mes)',
+  // common schedule/month keys
+  month: 'Mes',
+  current: 'Actual',
+  start_date: 'Fecha inicio',
+  horarios: 'Horarios',
+  imagenes: 'Imágenes',
+  image: 'Imagen',
+  __actions: 'Acciones',
   // agrega más traducciones aquí según necesidades
 };
 

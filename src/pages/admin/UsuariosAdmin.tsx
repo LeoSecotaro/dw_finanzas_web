@@ -1,7 +1,7 @@
 import React from 'react';
 import AdminLayout from '../../layouts/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
-import { listUsers, createUser, updateUser, deleteUser } from '../../api/usersApi';
+import { listUsers, createUser, updateUser, deleteUser, assignUserRole } from '../../api/usersApi';
 import { listRoles } from '../../api/rolesApi';
 import { FaPen, FaTimes } from 'react-icons/fa';
 import FormModal from '../../components/modals/FormModal';
@@ -34,32 +34,31 @@ export default function UsuariosAdmin() {
   // cached roles for dropdown
   const [rolesList, setRolesList] = React.useState<any[]>([]);
 
+  // extractable loader so we can refresh after updates
+  async function loadUsers() {
+    setLoading(true);
+    setError(null);
+    try {
+      const params: Record<string, any> = { page, per_page: perPage };
+      if (q) params.q = q;
+      const r = await listUsers(params);
+      const data = r.data || {};
+      const list = Array.isArray(data.users) ? data.users : (Array.isArray(data) ? data : []);
+      setUsers(list);
+      setTotalPages(data.total_pages || 1);
+      setPage(data.current_page || page);
+      setTotalCount(data.total_count || (list.length || 0));
+    } catch (e: any) {
+      console.error('failed to load users', e);
+      setError('No se pudieron cargar usuarios');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   React.useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const params: Record<string, any> = { page, per_page: perPage };
-        if (q) params.q = q;
-        const r = await listUsers(params);
-        if (cancelled) return;
-        const data = r.data || {};
-        const list = Array.isArray(data.users) ? data.users : (Array.isArray(data) ? data : []);
-        setUsers(list);
-        setTotalPages(data.total_pages || 1);
-        setPage(data.current_page || page);
-        setTotalCount(data.total_count || (list.length || 0));
-      } catch (e) {
-        console.error('failed to load users', e);
-        if (cancelled) return;
-        setError('No se pudieron cargar usuarios');
-      } finally {
-        if (cancelled) return;
-        setLoading(false);
-      }
-    };
-    load();
+    // load users whenever query/page/perPage change
+    loadUsers();
     // load roles list for dropdowns
     const loadRoles = async () => {
       try {
@@ -68,12 +67,12 @@ export default function UsuariosAdmin() {
         let list = Array.isArray(d.roles) ? d.roles : (Array.isArray(d) ? d : []);
         if (!Array.isArray(list)) list = [];
         setRolesList(list);
-      } catch (err) {
+      } catch (err: any) {
         console.error('failed to load roles', err);
       }
     };
     loadRoles();
-    return () => { cancelled = true; };
+    // no cleanup required
   }, [q, page, perPage]);
 
   const columns = React.useMemo(() => {
@@ -106,23 +105,53 @@ export default function UsuariosAdmin() {
           onChange={async (e) => {
             const val = e.target.value;
             const newRoleId = val ? Number(val) : null;
+            // optimistic update: update local user roles so dropdown reflects change immediately
+            const originalUser = users.find(u => u.id === row.id);
+            const originalRoles = originalUser ? originalUser.roles : undefined;
+            setUsers(prev => prev.map(u => u.id === row.id ? { ...u, roles: newRoleId ? [{ id: newRoleId, name: (rolesList.find(r => r.id === newRoleId) || {}).name }] : [] } : u));
+
             setSaving(true);
             try {
-              // try update with role_ids (common pattern), fallback will be handled server-side
-              const payload: any = newRoleId ? { role_ids: [newRoleId] } : { role_ids: [] };
-              const resp = await updateUser(row.id, payload);
-              // update local state from response if provided
-              const updated = resp.data && (resp.data.user || resp.data);
-              setUsers(prev => prev.map(u => u.id === row.id ? (updated ? updated : { ...u, roles: newRoleId ? [{ id: newRoleId, name: (rolesList.find(r => r.id === newRoleId) || {}).name }] : [] }) : u));
-              toast.success('Rol actualizado', { autoClose: 1000, position: 'top-right' });
-            } catch (err) {
-              console.error('role update failed', err);
-              toast.error('No se pudo actualizar el rol');
+              // primary: call dedicated Rails route with replace=true to replace roles
+              const resp = await assignUserRole(row.id, newRoleId, true);
+              console.log('assignUserRole resp', resp && resp.status, resp && resp.data);
+              if (resp && resp.status && resp.status >= 200 && resp.status < 300) {
+                const updated = resp.data && (resp.data.user || resp.data);
+                if (updated && updated.id) {
+                  setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+                }
+                toast.success('Rol actualizado', { autoClose: 1000, position: 'top-right' });
+              } else {
+                throw new Error('assignUserRole returned non-success status');
+              }
+            } catch (err: any) {
+              console.error('assignUserRole failed', err && (err.response ? err.response.data : err.message || err));
+              // revert optimistic change
+              setUsers(prev => prev.map(u => u.id === row.id ? { ...u, roles: originalRoles } : u));
+              // fallback: try updateUser with role_ids payload
+              try {
+                const payload = newRoleId != null ? { role_ids: [newRoleId] } : { role_ids: [] };
+                const r2 = await updateUser(row.id, payload);
+                console.log('fallback updateUser resp', r2 && r2.status, r2 && r2.data);
+                const updated2 = r2 && (r2.data && (r2.data.user || r2.data));
+                if (updated2 && updated2.id) {
+                  setUsers(prev => prev.map(u => u.id === updated2.id ? updated2 : u));
+                } else {
+                  await loadUsers();
+                }
+                toast.success('Rol actualizado', { autoClose: 1000, position: 'top-right' });
+              } catch (err2: any) {
+                console.error('fallback role update failed', err2 && (err2.response ? err2.response.data : err2.message || err2));
+                toast.error('No se pudo actualizar el rol');
+                // revert already attempted fallback by reloading users
+                await loadUsers();
+              }
             } finally {
               setSaving(false);
             }
           }}
-          style={{ padding: 6 }}
+          disabled={saving}
+          style={{ padding: 6, borderRadius: 8, border: '1px solid #444', background: '#2a2a2a', color: '#fff', minWidth: 120 }}
         >
           <option value="">—</option>
           {rolesList.map((r:any) => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -193,7 +222,7 @@ export default function UsuariosAdmin() {
                 <PageButton disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Anterior</PageButton>
                 <span>Página {page} / {totalPages}</span>
                 <PageButton disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Siguiente</PageButton>
-                <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }} style={{ padding: 6 }}>
+                <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }} style={{ padding: 6, borderRadius: 8, border: '1px solid #444', background: '#2a2a2a', color: '#fff' }}>
                   <option value={5}>5</option>
                   <option value={10}>10</option>
                   <option value={25}>25</option>
