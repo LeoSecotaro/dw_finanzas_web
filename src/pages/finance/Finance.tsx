@@ -34,7 +34,6 @@ export default function Finance() {
           </div>
 
           <div style={{ background: 'rgba(255,255,255,0.06)', padding: 24, borderRadius: 8, minHeight: 240 }}>
-            {/* Aquí irán filtros, charts y tablas */}
             {cards.length === 0 ? (
               <p style={{ color: '#ddd' }}>Acá se van a agregar las visualizaciones.</p>
             ) : (

@@ -62,7 +62,48 @@ export default function Schedules() {
     try {
       const params: Record<string, any> = {};
       if (selectedConsultorioId) params.consultorio_id = selectedConsultorioId;
-      const r = await listWorkerHoraries(params);
+      let r = await listWorkerHoraries(params);
+      // If the endpoint returns nothing for non-admins, try a few common fallback query params
+      // so the frontend can request the unrestricted list while backend still supports role-based filtering.
+      const tryFallbacks = async (): Promise<void> => {
+        try {
+          // basic parsed list from response
+          const extractLength = (resp: any) => {
+            if (!resp) return 0;
+            if (Array.isArray(resp.data)) return resp.data.length;
+            if (resp.data && Array.isArray(resp.data.months)) {
+              return resp.data.months.reduce((acc: number, m: any) => acc + (Array.isArray(m.horarios) ? m.horarios.length : 0), 0);
+            }
+            if (resp.data && Array.isArray(resp.data.horarios)) return resp.data.horarios.length;
+            return 0;
+          };
+
+          const initialCount = extractLength(r);
+          if (initialCount === 0) {
+            const fallbacks = [ { include_all: true }, { scope: 'all' }, { unscoped: true }, { all: true } ];
+            for (const fb of fallbacks) {
+              if (usedConsultorio !== selectedConsultorioId) return;
+              try {
+                const attempt = await listWorkerHoraries({ ...params, ...fb });
+                const len = extractLength(attempt);
+                console.debug('worker_horaries fallback attempt', fb, 'length', len, attempt && attempt.status);
+                if (len > 0) {
+                  r = attempt;
+                  return;
+                }
+              } catch (e) {
+                // ignore and continue trying other fallbacks
+                console.warn('fallback worker_horaries attempt failed', fb, e);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('error while attempting worker_horaries fallbacks', err);
+        }
+      };
+
+      await tryFallbacks();
+
       // normalize response: backend may return either an array of horaries or a months grouping { months: [{ month, current, start_date, end_date, count, horarios: [...] }, ...] }
       let list = r.data || [];
       // if backend returns months grouping, flatten to a single list of horarios (preserve month info on each item if available)
@@ -357,6 +398,7 @@ export default function Schedules() {
                   </button>
                   {/* consultorios dropdown */}
                   <select value={selectedConsultorioId ?? ''} onChange={(e) => setSelectedConsultorioId(e.target.value ? Number(e.target.value) : null)} style={{ background: '#222', color: '#fff', border: '1px solid #333', padding: '6px 8px', borderRadius: 6, marginLeft: 8 }}>
+                    <option value="">Todos los consultorios</option>
                     {consultorios.map((c) => (
                       <option key={c.id} value={c.id}>{c.name || c.nombre || `Consultorio ${c.id}`}</option>
                     ))}

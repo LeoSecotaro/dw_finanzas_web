@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import apiClient from '../../api/apiClient';
+import { getCurrentUser } from '../../api/usersApi';
 import { API_CONFIG } from '../../config/api';
 import styles from './Login.module.css';
 
@@ -27,6 +28,21 @@ export default function Login() {
       setResult(JSON.stringify(resp.data));
       // Redirect to home after successful login using react-router
       if (resp.status >= 200 && resp.status < 300) {
+        // poll current user a few times so the client-side role guard in App can detect admin
+        let ok = false;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            await getCurrentUser();
+            ok = true;
+            break;
+          } catch (e) {
+            // wait a bit before retrying (exponential backoff)
+            await new Promise((r) => setTimeout(r, 150 * Math.pow(2, attempt)));
+          }
+        }
+        if (!ok) {
+          console.warn('Could not confirm current user after sign-in; proceeding to /home (guard may block if role unresolved)');
+        }
         navigate('/home');
       }
     } catch (err: any) {

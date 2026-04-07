@@ -211,6 +211,14 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                 {(() => {
                   const dayShort = (day.short_name || day.name || '').toString().toLowerCase();
 
+                  const normalizeDiacritics = (s: string) => {
+                    try {
+                      return s.normalize('NFD').replace(/\p{M}/gu, '');
+                    } catch (e) {
+                      return s.replace(/[\u0300-\u036f]/g, '');
+                    }
+                  };
+
                   // helper: parse a date-like value into a date-only (midnight local) object
                   const parseDateOnly = (val: any) => {
                     if (!val) return null;
@@ -260,9 +268,17 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                   const columnIsPast = columnDateNormalized ? (columnDateNormalized < todayDate) : false;
 
                   const dayHoraries = (horaries || []).filter((hr: any) => {
-                    const hrDayId = hr.day_id ?? undefined;
-                    const hrDayStr = hr.day ? String(hr.day).toLowerCase() : undefined;
-                    const matchesDay = (hrDayId && hrDayId === day.id) || (hrDayStr && hrDayStr.startsWith(dayShort));
+                    const hrDayIdRaw = hr.day_id ?? hr.dayId ?? undefined;
+                    const hrDayId = (hrDayIdRaw != null && hrDayIdRaw !== '') ? Number(hrDayIdRaw) : undefined;
+                    const hrDayRaw = hr.day != null ? String(hr.day).toLowerCase().trim() : undefined;
+                    const hrDayStr = hrDayRaw ? normalizeDiacritics(hrDayRaw) : undefined;
+                    const dayShortNorm = normalizeDiacritics(dayShort);
+
+                    const matchesDayById = (hrDayId != null) && (Number(day.id) === hrDayId);
+                    const matchesDayByName = hrDayStr ? hrDayStr.startsWith(dayShortNorm) : false;
+                    const matchesDayByNumericName = hrDayStr ? (Number(hrDayStr) === Number(day.id)) : false;
+
+                    const matchesDay = matchesDayById || matchesDayByName || matchesDayByNumericName;
                     if (!matchesDay) return false;
                     // only show if horary is active on the column date (month-aware)
                     return isHoraryActiveOnDate(hr, columnDate);
@@ -542,7 +558,6 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
           </div>
         </div>
       )}
-
     </div>
   );
 }
