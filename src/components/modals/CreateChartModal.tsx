@@ -14,14 +14,61 @@ export default function CreateChartModal({ isOpen, onClose, onCreate }: Props) {
   const [startDate, setStartDate] = React.useState('2025-01-01');
   const [endDate, setEndDate] = React.useState('2025-12-31');
   const [obraSocials, setObraSocials] = React.useState<Array<any>>([]);
-  const [selectedObra, setSelectedObra] = React.useState<string | null>(null);
+  const [selectedObra, setSelectedObra] = React.useState<string>('');
+  const [obrasLoading, setObrasLoading] = React.useState<boolean>(false);
   const [metrics, setMetrics] = React.useState<Record<string, boolean>>({ produccion: false, prestacion: false, facturacion: false, liquidacion: false });
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (!isOpen) return;
     // fetch obra socials
-    apiClient.get('/obra_socials').then((r) => setObraSocials(r.data)).catch(() => setObraSocials([]));
+    setObrasLoading(true);
+    (async () => {
+      const endpoints = ['/obra_socials', '/obra_socials.json', '/api/obra_socials', '/obra_socials/list'];
+      let finalList: any[] = [];
+      let lastErr: any = null;
+      for (const ep of endpoints) {
+        try {
+          const r = await apiClient.get(ep);
+          console.debug('GET', ep, 'response', r);
+          if (r.status === 401 || r.status === 403) {
+            lastErr = { status: r.status };
+            break; // auth issue, stop trying
+          }
+          const d = r && r.data ? r.data : null;
+          let list: any[] = [];
+          if (Array.isArray(d)) list = d;
+          else if (d && Array.isArray(d.obra_socials)) list = d.obra_socials;
+          else if (d && Array.isArray(d.data)) list = d.data;
+          else if (d && Array.isArray(d.items)) list = d.items;
+          else if (d && typeof d === 'object') {
+            const vals = Object.values(d);
+            if (vals.length > 0 && vals.every(v => v && typeof v === 'object' && ('id' in v || 'name' in v))) {
+              list = vals as any[];
+            } else {
+              const nested = vals.find(v => Array.isArray(v));
+              if (Array.isArray(nested)) list = nested as any[];
+            }
+          }
+          if (list && list.length > 0) {
+            finalList = list;
+            break;
+          }
+        } catch (err) {
+          console.error('fetch', ep, 'failed', err);
+          lastErr = err;
+          continue;
+        }
+      }
+      if (lastErr && lastErr.status && (lastErr.status === 401 || lastErr.status === 403)) {
+        console.warn('obra_socials request blocked by auth (401/403)');
+        setObraSocials([]);
+      } else {
+        console.debug('Final obra socials list', finalList);
+        setObraSocials(finalList);
+      }
+      setObrasLoading(false);
+    })();
   }, [isOpen]);
 
   const toggleMetric = (key: string) => {
@@ -59,7 +106,9 @@ export default function CreateChartModal({ isOpen, onClose, onCreate }: Props) {
     const from = startDate;
     const to = endDate;
     // If selectedObra is an id, try to resolve the display name from obraSocials
-    const obraName = selectedObra ? (obraSocials.find((o: any) => String(o.id) === String(selectedObra))?.name || selectedObra) : undefined;
+    const obraName = selectedObra
+      ? (obraSocials.find((o: any) => String(o?.id ?? o?.value ?? o?.name ?? o) === String(selectedObra))?.name || selectedObra)
+      : undefined;
 
     let resp;
     try {
@@ -110,12 +159,18 @@ export default function CreateChartModal({ isOpen, onClose, onCreate }: Props) {
 
           <div style={{ marginBottom: 12 }}>
             <label>Obra social</label>
-            <select value={selectedObra || ''} onChange={(e) => setSelectedObra(e.target.value)}>
+            <select value={selectedObra} onChange={(e) => setSelectedObra(e.target.value)} disabled={obrasLoading}>
               <option value="">Todas</option>
-              {obraSocials.map((o: any) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
+              {obrasLoading && <option value="">Cargando...</option>}
+              {obraSocials.map((o: any) => {
+                const val = String(o?.id ?? o?.value ?? o?.name ?? o);
+                const label = o?.name ?? o?.label ?? String(o);
+                return <option key={val} value={val}>{label}</option>;
+              })}
             </select>
+            {!obrasLoading && obraSocials.length === 0 && (
+              <div style={{ color: '#777', marginTop: 8 }}>No hay obras sociales disponibles.</div>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
