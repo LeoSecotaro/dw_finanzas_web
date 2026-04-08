@@ -3,7 +3,7 @@ import { listDays } from '../../api/daysApi';
 import type { DayItem } from '../../api/daysApi';
 
 // week view calendar that paints schedule blocks per-hour
-export default function CalendarGrid({ horaries = [], onCreate, onDelete, onReplace, onDeleteReplacement, onDeleteFalta, onActionRequest, weekStart, weekDirection = 'none' }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void, onDelete?: (hr: any) => void, onReplace?: (hr: any) => void, onDeleteReplacement?: (replacement: any, horaryId: number) => void, onDeleteFalta?: (falta: any, horaryId: number) => void, onActionRequest?: (hr: any) => void, weekStart?: Date, weekDirection?: 'next'|'prev'|'none' }) {
+export default function CalendarGrid({ horaries = [], onCreate, onDelete, onReplace, onDeleteReplacement, onDeleteFalta, onActionRequest, weekStart, weekDirection = 'none', currentUserId = null, isAdmin = false }: { horaries?: any[], onCreate?: (data: { day_id: number; start_time: string; end_time?: string }) => void, onDelete?: (hr: any) => void, onReplace?: (hr: any) => void, onDeleteReplacement?: (replacement: any, horaryId: number) => void, onDeleteFalta?: (falta: any, horaryId: number) => void, onActionRequest?: (hr: any) => void, weekStart?: Date, weekDirection?: 'next'|'prev'|'none' , currentUserId?: any, isAdmin?: boolean }) {
   const defaultShort = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const [days, setDays] = useState<DayItem[]>(defaultShort.map((d, i) => ({ id: i + 1, short_name: d })));
 
@@ -140,6 +140,12 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
       setAnimStyle({ transform: 'translateX(0%)', opacity: 1 });
     }
   }, [weekStart, weekDirection]);
+
+  // helper to determine ownership
+  const canModify = (h: any) => {
+    const ownerId = h?.user_id ?? h?.userId;
+    return isAdmin || (currentUserId != null && Number(ownerId) === Number(currentUserId));
+  };
 
   return (
     <div style={{ width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
@@ -433,7 +439,7 @@ export default function CalendarGrid({ horaries = [], onCreate, onDelete, onRepl
                           }}
                         >
                            {/* delete X button top-right inside block */}
-                           {onDelete && (
+                           {canModify(hr) && onDelete && (
                              <button
                                onClick={(ev) => { ev.stopPropagation(); // if there's a falta, delete that; else if replaced, delete replacement; else delete horary
                                  if (falta && onDeleteFalta) return onDeleteFalta(falta, hr.id);

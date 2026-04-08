@@ -10,6 +10,7 @@ import CreateReplacementModal from '../../components/schedules/CreateReplacement
 import UploadModal from '../../components/modals/UploadModal';
 import { listConsultorios } from '../../api/consultoriosApi';
 import CreateFaltaModal from '../../components/schedules/CreateFaltaModal';
+import { getCurrentUser } from '../../api/usersApi';
 
 export default function Schedules() {
   const [horaries, setHoraries] = React.useState<any[]>([]);
@@ -42,6 +43,8 @@ export default function Schedules() {
   const [weekDirection, setWeekDirection] = React.useState<'next'|'prev'|'none'>('none');
   const [consultorios, setConsultorios] = React.useState<any[]>([]);
   const [selectedConsultorioId, setSelectedConsultorioId] = React.useState<number | null>(null);
+  const [currentUserId, setCurrentUserId] = React.useState<number | null>(null);
+  const [currentUserRoles, setCurrentUserRoles] = React.useState<string[]>([]);
 
   const getStartOfWeek = (date: Date, offset = 0) => {
     const d = new Date(date);
@@ -184,6 +187,36 @@ export default function Schedules() {
     loadHoraries();
   }, [selectedConsultorioId]);
 
+  // load current user for permission checks
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const resp = await getCurrentUser();
+        if (!mounted) return;
+        const u = resp && resp.data ? resp.data : resp;
+        const id = u?.id ?? null;
+        const roles: string[] = [];
+        if (u) {
+          if (Array.isArray(u.roles)) roles.push(...u.roles.map((r: any) => (typeof r === 'string' ? r : r.name || String(r))));
+          else if (u.role) roles.push(String(u.role));
+          else if (u.current_role) roles.push(String(u.current_role));
+        }
+        setCurrentUserId(id ? Number(id) : null);
+        setCurrentUserRoles(roles.map(r => String(r).toLowerCase()));
+      } catch (e) {
+        // ignore - permissions will be enforced server-side; client only improves UX
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const isAdmin = React.useMemo(() => currentUserRoles.includes('admin'), [currentUserRoles]);
+  // permissions for global actions: admins and 'doc' users
+  const canUpload = React.useMemo(() => isAdmin || currentUserRoles.includes('doc'), [isAdmin, currentUserRoles]);
+  const canCreateReplacementGlobal = React.useMemo(() => isAdmin || currentUserRoles.includes('doc'), [isAdmin, currentUserRoles]);
+  const canCreateHoraryGlobal = React.useMemo(() => isAdmin || currentUserRoles.includes('doc'), [isAdmin, currentUserRoles]);
+
   const handleCreate = (p: { day: string; day_id?: number; start: string; end: string; title?: string }) => {
     setCreating(true);
     // prepare payload expected by backend (only permitted fields)
@@ -237,6 +270,12 @@ export default function Schedules() {
 
   // handler when user clicks a block in the grid
   const handleGridDeleteRequest = (hr: any) => {
+    // only allow if admin or owner
+    const ownerId = hr?.user_id ?? hr?.userId ?? hr?.userId;
+    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+      toast.error('No estás autorizado para eliminar este horario', { autoClose: 1500 });
+      return;
+    }
     setSelectedToDelete(hr);
     setShowDeleteConfirm(true);
   };
@@ -249,6 +288,11 @@ export default function Schedules() {
 
   // new handler when user clicks a block: open action choice modal
   const handleGridActionRequest = (hr: any) => {
+    const ownerId = hr?.user_id ?? hr?.userId;
+    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+      toast.error('No estás autorizado para ver acciones de este horario', { autoClose: 1500 });
+      return;
+    }
     setActionHorary(hr);
     setShowActionChoice(true);
   };
@@ -266,13 +310,25 @@ export default function Schedules() {
 
   // handler when user requests deletion of a replacement
   const handleDeleteReplacementRequest = (replacement: any, horaryId: number) => {
-    // store as selectedToDelete but mark it as replacement to show different message
+    // check ownership of parent horary
+    const parent = horaries.find(h => h.id === horaryId);
+    const ownerId = parent?.user_id ?? parent?.userId;
+    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+      toast.error('No estás autorizado para eliminar este reemplazo', { autoClose: 1500 });
+      return;
+    }
     setSelectedToDelete({ ...replacement, _isReplacement: true, horary_id: horaryId });
     setShowDeleteConfirm(true);
   };
 
   // handler when user requests deletion of a falta (absence)
   const handleDeleteFaltaRequest = (falta: any, horaryId: number) => {
+    const parent = horaries.find(h => h.id === horaryId);
+    const ownerId = parent?.user_id ?? parent?.userId;
+    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+      toast.error('No estás autorizado para eliminar esta falta', { autoClose: 1500 });
+      return;
+    }
     setSelectedToDelete({ ...falta, _isFalta: true, horary_id: horaryId });
     setShowDeleteConfirm(true);
   };
@@ -291,7 +347,12 @@ export default function Schedules() {
         toast.success('Horario eliminado con éxito', { autoClose: 1000 });
       }).catch((e) => {
         console.error('failed to delete horary', e);
-        alert('No se pudo eliminar el horario.');
+        const status = e?.response?.status;
+        if (status === 403 || status === 401) {
+          toast.error('No estás autorizado para eliminar este horario', { autoClose: 1500 });
+        } else {
+          toast.error('No se pudo eliminar el horario', { autoClose: 1500 });
+        }
         setShowDeleteConfirm(false);
       }).finally(() => setDeleting(false));
     } else {
@@ -325,7 +386,12 @@ export default function Schedules() {
            setSelectedToDelete(null);
          }).catch((e) => {
            console.error('failed to delete replacement', e);
-           alert('No se pudo eliminar el reemplazo.');
+           const status = e?.response?.status;
+           if (status === 403 || status === 401) {
+             toast.error('No estás autorizado para eliminar este reemplazo', { autoClose: 1500 });
+           } else {
+             toast.error('No se pudo eliminar el reemplazo', { autoClose: 1500 });
+           }
            setShowDeleteConfirm(false);
          }).finally(() => setDeleting(false));
        } else {
@@ -351,7 +417,12 @@ export default function Schedules() {
            setSelectedToDelete(null);
          }).catch((e) => {
            console.error('failed to delete falta', e);
-           alert('No se pudo eliminar la falta.');
+           const status = e?.response?.status;
+           if (status === 403 || status === 401) {
+             toast.error('No estás autorizado para eliminar esta falta', { autoClose: 1500 });
+           } else {
+             toast.error('No se pudo eliminar la falta', { autoClose: 1500 });
+           }
            setShowDeleteConfirm(false);
          }).finally(() => setDeleting(false));
        } else {
@@ -405,6 +476,7 @@ export default function Schedules() {
                   </select>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
+                  {canUpload && (
                   <button
                     onClick={() => setShowUpload(true)}
                     onMouseEnter={() => setHoverUpload(true)}
@@ -423,6 +495,8 @@ export default function Schedules() {
                   >
                     Subir Excel
                   </button>
+                  )}
+                  {canCreateReplacementGlobal && (
                   <button
                     onClick={() => setShowReplacement(true)}
                     onMouseEnter={() => setHoverReplacement(true)}
@@ -441,6 +515,8 @@ export default function Schedules() {
                   >
                     Crear reemplazo
                   </button>
+                  )}
+                  {canCreateHoraryGlobal && (
                   <button
                     onClick={() => setShowCreate(true)}
                     onMouseEnter={() => setHoverCreate(true)}
@@ -459,9 +535,22 @@ export default function Schedules() {
                   >
                     Crear horario
                   </button>
-                </div>
-              </div>
-              <CalendarGrid weekStart={weekStart} weekDirection={weekDirection} horaries={horaries} onCreate={handleGridCreate} onDelete={handleGridDeleteRequest} onReplace={handleGridReplaceRequest} onDeleteReplacement={handleDeleteReplacementRequest} onDeleteFalta={handleDeleteFaltaRequest} onActionRequest={handleGridActionRequest} />
+                  )}
+                 </div>
+               </div>
+              <CalendarGrid
+                weekStart={weekStart}
+                weekDirection={weekDirection}
+                horaries={horaries}
+                onCreate={canCreateHoraryGlobal ? handleGridCreate : undefined}
+                onDelete={handleGridDeleteRequest}
+                onReplace={handleGridReplaceRequest}
+                onDeleteReplacement={handleDeleteReplacementRequest}
+                onDeleteFalta={handleDeleteFaltaRequest}
+                onActionRequest={handleGridActionRequest}
+                currentUserId={currentUserId}
+                isAdmin={isAdmin}
+              />
             </>
           )}
         </div>
@@ -528,9 +617,14 @@ export default function Schedules() {
              // show success toast even if API didn't return full object
              toast.success('Reemplazo creado con éxito', { autoClose: 2000 });
            }).catch((e) => {
-             console.error('failed to create replacement', e);
-             alert('No se pudo crear el reemplazo.');
-           }).finally(() => setCreatingReplacement(false));
+            console.error('failed to create replacement', e);
+            const status = e?.response?.status;
+            if (status === 403 || status === 401) {
+              toast.error('No estás autorizado para crear reemplazos en este horario', { autoClose: 1500 });
+            } else {
+              toast.error('No se pudo crear el reemplazo', { autoClose: 1500 });
+            }
+          }).finally(() => setCreatingReplacement(false));
          }}
          loading={creatingReplacement}
          horaries={horaries}
@@ -553,7 +647,12 @@ export default function Schedules() {
             toast.success('Falta creada', { autoClose: 1400 });
           }).catch((e) => {
             console.error('failed to create falta', e);
-            alert('No se pudo crear la falta.');
+            const status = e?.response?.status;
+            if (status === 403 || status === 401) {
+              toast.error('No estás autorizado para crear esta falta', { autoClose: 1500 });
+            } else {
+              toast.error('No se pudo crear la falta', { autoClose: 1500 });
+            }
           }).finally(() => setCreatingFalta(false));
         }}
         loading={creatingFalta}

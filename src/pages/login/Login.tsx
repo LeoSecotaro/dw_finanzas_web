@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 import apiClient from '../../api/apiClient';
 import { getCurrentUser } from '../../api/usersApi';
 import { API_CONFIG } from '../../config/api';
@@ -11,13 +12,55 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const formatError = (err: any) => {
+    try {
+      if (!err) return 'Error desconocido';
+      const resp = err?.response?.data ?? err;
+
+      // traducciones rápidas para mensajes comunes en inglés
+      const translations: Record<string, string> = {
+        'Invalid email or password.': 'E-mail o contraseña inválidos.',
+        'Invalid Email or password.': 'E-mail o contraseña inválidos.',
+        'Unauthorized': 'No autorizado',
+        'Not Found': 'No encontrado',
+        'Internal Server Error': 'Error interno del servidor'
+      };
+
+      if (typeof resp === 'string') {
+        // exact match
+        if (translations[resp]) return translations[resp];
+        // contains
+        for (const k of Object.keys(translations)) {
+          if (String(resp).toLowerCase().includes(k.toLowerCase())) return translations[k];
+        }
+        return resp;
+      }
+      if (typeof resp === 'object' && resp !== null) {
+        const msgCandidate = resp.error || resp.message || resp.detail;
+        if (typeof msgCandidate === 'string') {
+          if (translations[msgCandidate]) return translations[msgCandidate];
+          for (const k of Object.keys(translations)) {
+            if (msgCandidate.toLowerCase().includes(k.toLowerCase())) return translations[k];
+          }
+          return String(msgCandidate);
+        }
+        if (resp.errors) {
+          if (Array.isArray(resp.errors)) return resp.errors.map((e:any) => (typeof e === 'string' ? (translations[e] || e) : JSON.stringify(e))).join('; ');
+          if (typeof resp.errors === 'object') return Object.values(resp.errors).flat().map((e:any) => (typeof e === 'string' ? (translations[e] || e) : JSON.stringify(e))).join('; ');
+        }
+        try { return JSON.stringify(resp); } catch (e) { return String(resp); }
+      }
+      return String(err.message || err);
+    } catch (e) {
+      return 'Error inesperado';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setResult(null);
 
     try {
       // Hacer POST al endpoint Devise (formato JSON)
@@ -25,7 +68,9 @@ export default function Login() {
         user: { email, password }
       });
 
-      setResult(JSON.stringify(resp.data));
+      // Mostrar toast de éxito en español y sin mostrar payload
+      toast.success('Inicio de sesión correcto', { autoClose: 1500 });
+
       // Redirect to home after successful login using react-router
       if (resp.status >= 200 && resp.status < 300) {
         // poll current user a few times so the client-side role guard in App can detect admin
@@ -46,8 +91,9 @@ export default function Login() {
         navigate('/home');
       }
     } catch (err: any) {
-      // Mostrar error recibido o mensaje genérico
-      setResult(err.response?.data || err.message || 'Error');
+      const msg = formatError(err);
+      // mostrar error con toast en español
+      toast.error(msg, { autoClose: 1500 });
     } finally {
       setLoading(false);
     }
@@ -94,8 +140,6 @@ export default function Login() {
               )}
             </button>
           </div>
-
-          {result && <div className={styles.result}>{String(result)}</div>}
 
           <button
             type="submit"

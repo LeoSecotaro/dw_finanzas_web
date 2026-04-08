@@ -11,6 +11,7 @@ import HorariosAdmin from './pages/admin/HorariosAdmin'
 import WorkerHoraryDetail from './pages/admin/WorkerHoraryDetail'
 import UsuariosAdmin from './pages/admin/UsuariosAdmin'
 import ObrasSocialesAdmin from './pages/admin/ObrasSocialesAdmin'
+import RolePermissions from './pages/admin/RolePermissions'
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
           <Route path="usuarios" element={<UsuariosAdmin />} />
           <Route path="horarios" element={<HorariosAdmin />} />
           <Route path="obras_sociales" element={<ObrasSocialesAdmin />} />
+          <Route path="roles/permissions" element={<RolePermissions />} />
           <Route path="consultorios" element={<ConsultoriosAdminPage />} />
           <Route path="roles" element={<RolesAdmin />} />
           {/* Example of nested detail route used elsewhere */}

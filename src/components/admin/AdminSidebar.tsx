@@ -24,6 +24,10 @@ export default function AdminSidebar({ sections, active, onSelect }: { sections:
       navigate('/admin/obras_sociales');
       return;
     }
+    if (id === 'roles/permissions') {
+      navigate('/admin/roles/permissions');
+      return;
+    }
     if (id === 'roles') {
       navigate('/admin/roles');
       return;
@@ -44,7 +48,7 @@ export default function AdminSidebar({ sections, active, onSelect }: { sections:
         {sections.map((s) => {
           const isHovered = hovered === s.id;
           // mark active if route matches /admin/:section or sidebar active state
-          const isActive = location.pathname === `/admin/${s.id}` || active === s.id;
+          const isActive = location.pathname.startsWith(`/admin/${s.id}`) || active === s.id;
 
           return (
             <button

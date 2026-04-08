@@ -1,0 +1,21 @@
+.container { padding: 24px; color: #fff; }
+.header { display:flex; align-items:center; gap:12px; margin-bottom:18px }
+.backButton { background:#1677ff; color:#fff; border:none; padding:8px 10px; border-radius:6px; cursor:pointer }
+.controls { margin-bottom:16px; display:flex; gap:12px; align-items:center }
+.controls label { color: #fff }
+.controls select { background:#333; color:#fff; border:1px solid #444; padding:6px; border-radius:6px }
+.columns { display:flex; gap:16px }
+.colLeft, .colRight { flex:1 }
+.colTitle { font-weight:700; margin-bottom:8px; color: #fff }
+.list { background:#202425; border-radius:8px; min-height:300px; padding:12px; color:#fff }
+.listRight { background:#232737; border-radius:8px; min-height:300px; padding:12px; overflow:auto; color:#fff }
+.empty { color:#aaa; padding:8px }
+.item, .activeItem { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px; border-radius:6px; background:rgba(255,255,255,0.02); margin-bottom:8px; color:#fff }
+.itemLabel { font-weight:600; color:#fff }
+.itemDesc { font-size:12px; color:#bbb }
+.addBtn { background:#2b8aef; color:#fff; border:none; padding:6px 8px; border-radius:6px; cursor:pointer }
+.removeBtn { background:#d64545; color:#fff; border:none; padding:6px 8px; border-radius:6px; cursor:pointer }
+
+/* ensure scrollbars/text inside options readable */
+.list ::-webkit-scrollbar { width: 10px }
+.list ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 6px }
