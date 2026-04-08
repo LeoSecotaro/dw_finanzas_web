@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import Finance from './pages/finance/Finance'
 import Schedules from './pages/schedules/Schedules'
 import Admin from './pages/admin/Admin'
+import AdminGuard from './components/auth/AdminGuard';
 import ConsultoriosAdminPage from './pages/admin/ConsultoriosAdminPage'
 import RolesAdmin from './pages/admin/RolesAdmin'
 import HorariosAdmin from './pages/admin/HorariosAdmin'
@@ -20,14 +21,22 @@ function App() {
         <Route path="/home" element={<Home />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/horarios" element={<Schedules />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/admin/inicio" element={<Admin />} />
-        <Route path="/admin/consultorios" element={<ConsultoriosAdminPage />} />
-        <Route path="/admin/usuarios" element={<UsuariosAdmin />} />
-        <Route path="/admin/obras_sociales" element={<ObrasSocialesAdmin />} />
-        <Route path="/admin/roles" element={<RolesAdmin />} />
-        <Route path="/admin/horarios" element={<HorariosAdmin />} />
-        <Route path="/admin/horarios/:id" element={<WorkerHoraryDetail />} />
+
+        {/* Admin parent route: use nested routes so Admin's <Outlet/> renders the specific admin pages */}
+        <Route path="/admin/*" element={
+          <AdminGuard>
+            <Admin />
+          </AdminGuard>
+        }>
+          <Route index element={<Navigate to="/admin/usuarios" replace />} />
+          <Route path="usuarios" element={<UsuariosAdmin />} />
+          <Route path="horarios" element={<HorariosAdmin />} />
+          <Route path="obras_sociales" element={<ObrasSocialesAdmin />} />
+          <Route path="consultorios" element={<ConsultoriosAdminPage />} />
+          <Route path="roles" element={<RolesAdmin />} />
+          {/* Example of nested detail route used elsewhere */}
+          <Route path="horarios/:workerId" element={<WorkerHoraryDetail />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   )

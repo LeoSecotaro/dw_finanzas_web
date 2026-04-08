@@ -4,7 +4,7 @@ import AdminSidebar from '../components/admin/AdminSidebar';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const sections = [
-    { id: 'dashboard', label: 'Inicio' },
+    { id: 'inicio', label: 'Inicio' },
     { id: 'usuarios', label: 'Usuarios' },
     { id: 'horarios', label: 'Horarios' },
     { id: 'consultorios', label: 'Consultorios' },

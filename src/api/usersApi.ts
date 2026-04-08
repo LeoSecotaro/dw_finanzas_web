@@ -32,20 +32,13 @@ export async function assignUserRole(userId: number | string, roleId: number | n
 
 // Try common endpoints to fetch the currently authenticated user. Different backends expose different routes (/me, /current_user, /users/current, etc.).
 export async function getCurrentUser() {
-  const candidates = ['/me', '/current_user', '/users/current', '/user', '/users/me'];
-  let lastError: any = null;
-  for (const path of candidates) {
-    try {
-      const resp = await apiClient.get(path);
-      // simple heuristic: accept any 2xx with data
-      if (resp && (resp.status >= 200 && resp.status < 300) && (resp.data != null)) {
-        return resp;
-      }
-    } catch (e) {
-      lastError = e;
-      // continue trying other candidates
-    }
+  // Call the single canonical endpoint provided by the backend. This avoids noisy 404s.
+  try {
+    const resp = await apiClient.get('/user/me');
+    if (resp && resp.status >= 200 && resp.status < 300) return resp;
+    throw new Error('Unexpected response from /user/me: ' + resp?.status);
+  } catch (e) {
+    // rethrow so callers can handle (no internal retries to avoid noise)
+    throw e;
   }
-  // if none succeeded, rethrow the last error for debugging
-  throw lastError || new Error('Could not fetch current user');
 }

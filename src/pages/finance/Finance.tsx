@@ -1,4 +1,7 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { getCurrentUser } from '../../api/usersApi';
 import Navbar from '../../components/navbar/Navbar';
 import UploadModal from '../../components/modals/UploadModal';
 import CreateChartModal from '../../components/modals/CreateChartModal';
@@ -6,6 +9,37 @@ import CardsContainer from '../../components/graphicsCards/graphicsCards';
 import styles from './Finance.module.css';
 
 export default function Finance() {
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const resp = await getCurrentUser();
+        if (!mounted) return;
+        const u = resp && resp.data ? resp.data : resp;
+        const roles: string[] = [];
+        if (u) {
+          if (Array.isArray(u.roles)) roles.push(...u.roles.map((r: any) => (typeof r === 'string' ? r : r.name || String(r))));
+          else if (u.role) roles.push(String(u.role));
+          else if (u.current_role) roles.push(String(u.current_role));
+        }
+        const lowered = roles.map(r => String(r).toLowerCase());
+        if (lowered.includes('colaborador')) {
+          toast.error('No estás autorizado para acceder a Finanzas', { autoClose: 1500 });
+          navigate('/home', { replace: true });
+        }
+      } catch (e) {
+        // on error (not authenticated / other), block access as conservative default for finances
+        try {
+          toast.error('No estás autorizado para acceder a Finanzas', { autoClose: 1500 });
+        } catch (err) {}
+        if (mounted) navigate('/home', { replace: true });
+      }
+    })();
+    return () => { mounted = false; };
+  }, [navigate]);
+
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [cards, setCards] = React.useState<Array<any>>([]);
