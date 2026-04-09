@@ -21,23 +21,28 @@ async function fetchFirstUser(endpointList: string[]) {
   }
 }
 
-function extractRoles(obj: any): string[] {
+function extractPermissions(obj: any): string[] {
   if (!obj) return [];
-  // obj may already be the user object, or wrapped: { data: {...} }
   const u = obj.user || obj.data || obj;
   if (!u) return [];
-  if (Array.isArray(u.roles)) return u.roles.map((r: any) => (typeof r === 'string' ? r : r.name || r.role || '')).filter(Boolean);
-  if (u.role) return [String(u.role)];
-  if (u.current_role) return [String(u.current_role)];
-  if (u.role_name) return [String(u.role_name)];
-  if (u.type) return [String(u.type)];
-  // try nested structures
-  if (u.user && Array.isArray(u.user.roles)) return u.user.roles.map((r: any) => r.name || r);
-  // fallback: scan keys
+  // Common keys: permissions, assigned_permissions, role_permissions
+  const tryGet = (arr: any) => {
+    if (!Array.isArray(arr)) return [] as string[];
+    return arr.map((p: any) => (typeof p === 'string' ? p : p.name ?? p.permission_name ?? p.title ?? '')).filter(Boolean).map((x: any) => String(x).toLowerCase());
+  };
+
+  let perms: string[] = [];
+  if (Array.isArray(u.permissions)) perms = perms.concat(tryGet(u.permissions));
+  if (Array.isArray(u.assigned_permissions)) perms = perms.concat(tryGet(u.assigned_permissions));
+  if (Array.isArray(u.role_permissions)) perms = perms.concat(tryGet(u.role_permissions));
+  if (u.user && Array.isArray(u.user.permissions)) perms = perms.concat(tryGet(u.user.permissions));
+
+  // fallback: scan keys for arrays that look like permissions
   for (const k of Object.keys(u)) {
-    if (typeof u[k] === 'string' && /role/i.test(k)) return [String(u[k])];
+    if (/perm/i.test(k) && Array.isArray(u[k])) perms = perms.concat(tryGet(u[k]));
   }
-  return [];
+
+  return Array.from(new Set(perms));
 }
 
 export default function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -53,9 +58,14 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
         setState('denied');
         return;
       }
-      const roles = extractRoles(resp.data);
-      const isAdmin = roles.map(r => String(r).toLowerCase()).includes('admin');
-      setState(isAdmin ? 'allowed' : 'denied');
+
+      const perms = extractPermissions(resp.data);
+      // allow if user has 'system.manage' permission or any permission under 'system.' namespace
+      const hasSystemManage = perms.includes('system.manage');
+      const hasSystemNamespace = perms.some(p => typeof p === 'string' && p.startsWith('system.'));
+
+      const allowed = hasSystemManage || hasSystemNamespace;
+      setState(allowed ? 'allowed' : 'denied');
     })();
     return () => { mounted = false; };
   }, []);

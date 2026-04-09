@@ -7,17 +7,9 @@ export default function Admin() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // decide which sidebar to show based on current location
-  const inicioSections = [
+  // fixed sidebar order (always shown)
+  const sections = [
     { id: 'inicio', label: 'Inicio' },
-    { id: 'usuarios', label: 'Usuarios' },
-    { id: 'horarios', label: 'Horarios' },
-    { id: 'consultorios', label: 'Consultorios' },
-    { id: 'roles', label: 'Roles' },
-    { id: 'obras_sociales', label: 'Obras Sociales' },
-  ];
-
-  const tableSections = [
     { id: 'usuarios', label: 'Usuarios' },
     { id: 'horarios', label: 'Horarios' },
     { id: 'obras_sociales', label: 'Obras sociales' },
@@ -26,17 +18,12 @@ export default function Admin() {
     { id: 'roles', label: 'Roles' },
   ];
 
-  const isInicio = location.pathname === '/admin' || location.pathname.startsWith('/admin/inicio');
-
-  const sections = isInicio ? inicioSections : tableSections;
-
-  const [active, setActive] = React.useState(isInicio ? 'inicio' : 'usuarios');
+  const [active, setActive] = React.useState('inicio');
 
   // keep active tab in sync with URL and only redirect when user is at /admin
   React.useEffect(() => {
     const parts = location.pathname.split('/').filter(Boolean);
-    // parts like ['admin', 'usuarios'] -> take second segment
-    const seg = parts[1] || (isInicio ? 'inicio' : 'usuarios');
+    const seg = parts[1] || 'inicio';
     setActive(seg);
     if (location.pathname === '/admin') {
       navigate('/admin/inicio', { replace: true });

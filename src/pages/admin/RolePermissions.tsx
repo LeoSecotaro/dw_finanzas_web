@@ -3,6 +3,7 @@ import apiClient from '../../api/apiClient';
 import styles from './RolePermissions.module.css';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
+import useCurrentUser from '../../hooks/useCurrentUser';
 
 export default function RolePermissions() {
   const [roles, setRoles] = React.useState<any[]>([]);
@@ -12,6 +13,7 @@ export default function RolePermissions() {
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const navigate = useNavigate();
+  const { refetch } = useCurrentUser();
 
   React.useEffect(() => {
     let mounted = true;
@@ -43,10 +45,13 @@ export default function RolePermissions() {
     (async () => {
       try {
         setLoading(true);
-        const resp = await apiClient.get(`/roles/${selectedRoleId}/permissions`).catch(() => ({ data: [] }));
+        // Use role show endpoint which returns the role with permissions in the response
+        const resp = await apiClient.get(`/roles/${selectedRoleId}`).catch(() => ({ data: {} }));
         if (!mounted) return;
-        // keep raw response (could be array of ids or objects)
-        setActivePerms(resp.data || []);
+        const role = resp.data || {};
+        // support different backend keys (permissions, role_permissions, assigned_permissions)
+        const perms = role.permissions ?? role.role_permissions ?? role.assigned_permissions ?? [];
+        setActivePerms(perms || []);
       } catch (e) {
         setActivePerms([]);
       } finally {
@@ -56,41 +61,33 @@ export default function RolePermissions() {
     return () => { mounted = false; };
   }, [selectedRoleId]);
 
-  // helper to extract an identifier from a permission value (object or primitive)
-  const getPermId = React.useCallback((p: any) => (p && (p.id ?? p.permission_id ?? p.name)) ?? p, []);
+  // helper to extract permission name/id
+  const permName = React.useCallback((p: any) => (p && (p.name ?? p.permission_name ?? p.title)) ?? String(p), []);
+  const permId = React.useCallback((p: any) => (p && (p.id ?? p.permission_id)) ?? null, []);
 
-  // set of active permission ids/names for quick filtering
-  const activePermIds = React.useMemo(() => new Set((activePerms || []).map(getPermId)), [activePerms, getPermId]);
+  // active names set
+  const activeNames = React.useMemo(() => new Set((activePerms || []).map(permName)), [activePerms, permName]);
 
-  // derive display objects for active permissions: prefer full permission obj from `permissions` list
-  const activePermObjects = React.useMemo(() => {
-    return (activePerms || []).map((p: any) => {
-      const pid = getPermId(p);
-      if (!pid) return null;
-      // try to find full permission object from global permissions list
-      const found = (permissions || []).find((x: any) => String(getPermId(x)) === String(pid));
-      if (found) return found;
-      // if original `p` already looks like an object with a name/description, use it
-      if (p && typeof p === 'object' && (p.name || p.title)) return p;
-      // fallback: construct minimal object
-      return { id: pid, name: String(pid) } as any;
-    }).filter(Boolean);
-  }, [activePerms, permissions, getPermId]);
-
-  const availablePerms = React.useMemo(() => {
-    return (permissions || []).filter((p:any) => !activePermIds.has(getPermId(p)));
-  }, [permissions, activePerms]);
+  // available permissions are those in global list whose name is not active
+  const availablePerms = React.useMemo(() => (permissions || []).filter((p:any) => !activeNames.has(permName(p))), [permissions, activeNames, permName]);
 
   const handleAdd = async (perm: any) => {
     if (!selectedRoleId) return;
     setSaving(true);
     try {
-      // try POST /roles/:id/permissions { permission_id }
-      const pid = getPermId(perm);
-      await apiClient.post(`/roles/${selectedRoleId}/permissions`, { permission_id: pid });
-      // optimistic update: append the permission id (or object) as returned by client
-      setActivePerms((s) => [...s, perm]);
+      const name = permName(perm);
+      // POST expects permission_name
+      await apiClient.post(`/roles/${selectedRoleId}/permissions`, { permission_name: name });
+      // optimistic update: append the permission object (prefer full object from permissions list)
+      const full = (permissions || []).find((x:any) => permName(x) === name) || { name };
+      setActivePerms((s) => [...(s || []), full]);
       toast.success('Permiso agregado', { autoClose: 1200 });
+      // refresh current user so permission changes take effect immediately
+      try {
+        if (typeof refetch === 'function') await refetch();
+      } catch (e) {
+        // ignore
+      }
     } catch (e) {
       toast.error('No se pudo agregar permiso', { autoClose: 1400 });
     } finally {
@@ -102,11 +99,18 @@ export default function RolePermissions() {
     if (!selectedRoleId) return;
     setSaving(true);
     try {
-      // try DELETE /roles/:id/permissions/:perm_id
-      const pid = getPermId(perm);
-      await apiClient.delete(`/roles/${selectedRoleId}/permissions/${pid}`);
-      setActivePerms((s) => (s || []).filter((p:any) => String(getPermId(p)) !== String(pid)));
+      // need permission id to delete; try to get id from perm, otherwise try to find by name in global list
+      const id = permId(perm) ?? permId((permissions || []).find((x:any) => permName(x) === permName(perm)));
+      if (!id) throw new Error('permission id not found');
+      await apiClient.delete(`/roles/${selectedRoleId}/permissions/${id}`);
+      setActivePerms((s) => (s || []).filter((p:any) => permName(p) !== permName(perm)));
       toast.success('Permiso eliminado', { autoClose: 1200 });
+      // refresh current user so permission changes take effect immediately
+      try {
+        if (typeof refetch === 'function') await refetch();
+      } catch (e) {
+        // ignore
+      }
     } catch (e) {
       toast.error('No se pudo eliminar permiso', { autoClose: 1400 });
     } finally {
@@ -139,7 +143,7 @@ export default function RolePermissions() {
           <div className={styles.list}>
             {availablePerms.length === 0 && <div className={styles.empty}>No hay permisos para agregar</div>}
             {availablePerms.map((p:any) => (
-              <div key={p.id || p.permission_id || p} className={styles.item}>
+              <div key={p.id || p.permission_id || p.name} className={styles.item}>
                 <div className={styles.itemLabel}>{p.name || p.title || String(p)}</div>
                 <button className={styles.addBtn} onClick={() => handleAdd(p)} disabled={saving}>Agregar</button>
               </div>
@@ -150,11 +154,11 @@ export default function RolePermissions() {
         <div className={styles.colRight}>
           <div className={styles.colTitle}>Permisos activos</div>
           <div className={styles.listRight}>
-            {activePermObjects.length === 0 && <div className={styles.empty}>No hay permisos activos</div>}
-            {activePermObjects.map((p:any) => (
-              <div key={p.id || p.permission_id || p.name} className={styles.activeItem}>
+            {activePerms.length === 0 && <div className={styles.empty}>No hay permisos activos</div>}
+            {activePerms.map((p:any) => (
+              <div key={permId(p) || permName(p)} className={styles.activeItem}>
                 <div>
-                  <div className={styles.itemLabel}>{p.name || p.title || String(p)}</div>
+                  <div className={styles.itemLabel}>{permName(p)}</div>
                   <div className={styles.itemDesc}>{p.description || p.desc || ''}</div>
                 </div>
                 <button className={styles.removeBtn} onClick={() => handleRemove(p)} disabled={saving}>Quitar</button>

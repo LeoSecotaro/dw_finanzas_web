@@ -10,7 +10,7 @@ import CreateReplacementModal from '../../components/schedules/CreateReplacement
 import UploadModal from '../../components/modals/UploadModal';
 import { listConsultorios } from '../../api/consultoriosApi';
 import CreateFaltaModal from '../../components/schedules/CreateFaltaModal';
-import { getCurrentUser } from '../../api/usersApi';
+import useCurrentUser from '../../hooks/useCurrentUser';
 
 export default function Schedules() {
   const [horaries, setHoraries] = React.useState<any[]>([]);
@@ -45,6 +45,7 @@ export default function Schedules() {
   const [selectedConsultorioId, setSelectedConsultorioId] = React.useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = React.useState<number | null>(null);
   const [currentUserRoles, setCurrentUserRoles] = React.useState<string[]>([]);
+  const [currentUserPerms, setCurrentUserPerms] = React.useState<string[]>([]);
 
   const getStartOfWeek = (date: Date, offset = 0) => {
     const d = new Date(date);
@@ -187,14 +188,14 @@ export default function Schedules() {
     loadHoraries();
   }, [selectedConsultorioId]);
 
-  // load current user for permission checks
+  // use centralized hook to fetch current user and permissions
+  const { user: currentUserObj } = useCurrentUser();
   React.useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const resp = await getCurrentUser();
+        const u = currentUserObj?.user ?? currentUserObj?.data ?? currentUserObj ?? null;
         if (!mounted) return;
-        const u = resp && resp.data ? resp.data : resp;
         const id = u?.id ?? null;
         const roles: string[] = [];
         if (u) {
@@ -202,20 +203,35 @@ export default function Schedules() {
           else if (u.role) roles.push(String(u.role));
           else if (u.current_role) roles.push(String(u.current_role));
         }
+        // collect permissions from common places
+        const tryGet = (arr: any) => Array.isArray(arr) ? arr.map((p: any) => (typeof p === 'string' ? p : p.name ?? p.permission_name ?? p.title ?? '')).filter(Boolean).map((x: any) => String(x).toLowerCase()) : [] as string[];
+        let perms: string[] = [];
+        if (u) {
+          perms = perms.concat(tryGet(u.permissions));
+          perms = perms.concat(tryGet(u.assigned_permissions));
+          perms = perms.concat(tryGet(u.role_permissions));
+          if (u.user && Array.isArray(u.user.permissions)) perms = perms.concat(tryGet(u.user.permissions));
+          // fallback: scan keys
+          for (const k of Object.keys(u)) {
+            if (/perm/i.test(k) && Array.isArray(u[k])) perms = perms.concat(tryGet(u[k]));
+          }
+        }
         setCurrentUserId(id ? Number(id) : null);
         setCurrentUserRoles(roles.map(r => String(r).toLowerCase()));
+        setCurrentUserPerms(Array.from(new Set(perms.map(p => String(p).toLowerCase()))));
       } catch (e) {
-        // ignore - permissions will be enforced server-side; client only improves UX
+        // ignore - server enforces permissions
       }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [currentUserObj]);
 
-  const isAdmin = React.useMemo(() => currentUserRoles.includes('admin'), [currentUserRoles]);
-  // permissions for global actions: admins and 'doc' users
-  const canUpload = React.useMemo(() => isAdmin || currentUserRoles.includes('doc'), [isAdmin, currentUserRoles]);
-  const canCreateReplacementGlobal = React.useMemo(() => isAdmin || currentUserRoles.includes('doc'), [isAdmin, currentUserRoles]);
-  const canCreateHoraryGlobal = React.useMemo(() => isAdmin || currentUserRoles.includes('doc'), [isAdmin, currentUserRoles]);
+  const hasPerm = React.useCallback((p: string) => currentUserPerms.includes(String(p).toLowerCase()), [currentUserPerms]);
+  const isAdmin = React.useMemo(() => currentUserRoles.includes('admin') || hasPerm('system.manage'), [currentUserRoles, hasPerm]);
+  // permissions for global actions: admins, 'doc' role or specific horarios.*.all permissions
+  const canUpload = React.useMemo(() => isAdmin || currentUserRoles.includes('doc') || hasPerm('horarios.abm_horarios.all') || hasPerm('horarios.abm_reemplazos.all') || hasPerm('horarios.abm_faltas.all'), [isAdmin, currentUserRoles, hasPerm]);
+  const canCreateReplacementGlobal = React.useMemo(() => isAdmin || currentUserRoles.includes('doc') || hasPerm('horarios.abm_reemplazos.all'), [isAdmin, currentUserRoles, hasPerm]);
+  const canCreateHoraryGlobal = React.useMemo(() => isAdmin || currentUserRoles.includes('doc') || hasPerm('horarios.abm_horarios.all'), [isAdmin, currentUserRoles, hasPerm]);
 
   const handleCreate = (p: { day: string; day_id?: number; start: string; end: string; title?: string }) => {
     setCreating(true);
@@ -270,9 +286,10 @@ export default function Schedules() {
 
   // handler when user clicks a block in the grid
   const handleGridDeleteRequest = (hr: any) => {
-    // only allow if admin or owner
+    // allow if admin, has global horarios delete permission, or owner
     const ownerId = hr?.user_id ?? hr?.userId ?? hr?.userId;
-    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+    const allowedByPerm = hasPerm('horarios.abm_horarios.all');
+    if (!isAdmin && !allowedByPerm && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
       toast.error('No estás autorizado para eliminar este horario', { autoClose: 1500 });
       return;
     }
@@ -289,7 +306,8 @@ export default function Schedules() {
   // new handler when user clicks a block: open action choice modal
   const handleGridActionRequest = (hr: any) => {
     const ownerId = hr?.user_id ?? hr?.userId;
-    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+    const allowedByPerm = hasPerm('horarios.abm_horarios.all') || hasPerm('horarios.abm_reemplazos.all') || hasPerm('horarios.abm_faltas.all');
+    if (!isAdmin && !allowedByPerm && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
       toast.error('No estás autorizado para ver acciones de este horario', { autoClose: 1500 });
       return;
     }
@@ -313,7 +331,8 @@ export default function Schedules() {
     // check ownership of parent horary
     const parent = horaries.find(h => h.id === horaryId);
     const ownerId = parent?.user_id ?? parent?.userId;
-    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+    const allowedByPerm = hasPerm('horarios.abm_reemplazos.all');
+    if (!isAdmin && !allowedByPerm && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
       toast.error('No estás autorizado para eliminar este reemplazo', { autoClose: 1500 });
       return;
     }
@@ -325,7 +344,8 @@ export default function Schedules() {
   const handleDeleteFaltaRequest = (falta: any, horaryId: number) => {
     const parent = horaries.find(h => h.id === horaryId);
     const ownerId = parent?.user_id ?? parent?.userId;
-    if (!isAdmin && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
+    const allowedByPerm = hasPerm('horarios.abm_faltas.all');
+    if (!isAdmin && !allowedByPerm && currentUserId != null && Number(ownerId) !== Number(currentUserId)) {
       toast.error('No estás autorizado para eliminar esta falta', { autoClose: 1500 });
       return;
     }

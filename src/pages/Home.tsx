@@ -4,42 +4,41 @@ import { FaRegMoneyBillAlt, FaClock, FaTools } from 'react-icons/fa';
 import Navbar from '../components/navbar/Navbar';
 import { useNavigate } from 'react-router-dom';
 import useCurrentUser from '../hooks/useCurrentUser';
-import { getCurrentUser } from '../api/usersApi';
 
 export default function Home() {
   const navigate = useNavigate();
   const { user, loading } = useCurrentUser();
-  const [roles, setRoles] = React.useState<string[] | null>(null);
-  const [userLoading, setUserLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const resp = await getCurrentUser();
-        if (!mounted) return;
-        const u = resp && resp.data ? resp.data : resp;
-        const rlist: string[] = [];
-        if (u) {
-          if (Array.isArray(u.roles)) rlist.push(...u.roles.map((r: any) => (typeof r === 'string' ? r : r.name || String(r))));
-          else if (u.role) rlist.push(String(u.role));
-          else if (u.current_role) rlist.push(String(u.current_role));
-        }
-        setRoles(rlist.map(rr => String(rr).toLowerCase()));
-      } catch (e) {
-        setRoles(null);
-      } finally {
-        if (mounted) setUserLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  const userIsAdmin = React.useMemo<boolean>(() => {
-    if (!user || !Array.isArray(user.roles)) return false;
-    const normalized: string[] = user.roles.map((r: any) => (typeof r === 'string' ? r : (r && (r.name || r.role)) || '')).filter(Boolean).map((x: any) => String(x).toLowerCase());
-    return normalized.includes('admin');
+  // derive roles from the user object exposed by the hook
+  const userRoles = React.useMemo(() => {
+    if (!user) return [] as string[];
+    const u = user.user || user.data || user;
+    if (!u) return [] as string[];
+    if (Array.isArray(u.roles)) return u.roles.map((r: any) => (typeof r === 'string' ? r : r.name || String(r))).filter(Boolean).map((x: any) => String(x).toLowerCase());
+    if (u.role) return [String(u.role).toLowerCase()];
+    if (u.current_role) return [String(u.current_role).toLowerCase()];
+    return [] as string[];
   }, [user]);
+
+  // derive permissions from the user object
+  const userPermissions = React.useMemo(() => {
+    if (!user) return [] as string[];
+    const u = user.user || user.data || user;
+    if (!u) return [] as string[];
+    const tryGet = (arr: any) => Array.isArray(arr) ? arr.map((p: any) => (typeof p === 'string' ? p : p.name ?? p.permission_name ?? p.title ?? '')).filter(Boolean).map((x: any) => String(x).toLowerCase()) : [] as string[];
+    if (Array.isArray(u.permissions)) return tryGet(u.permissions);
+    if (Array.isArray(u.assigned_permissions)) return tryGet(u.assigned_permissions);
+    if (Array.isArray(u.role_permissions)) return tryGet(u.role_permissions);
+    if (u.user && Array.isArray(u.user.permissions)) return tryGet(u.user.permissions);
+    for (const k of Object.keys(u)) {
+      if (/perm/i.test(k) && Array.isArray(u[k])) return tryGet(u[k]);
+    }
+    return [] as string[];
+  }, [user]);
+
+  const userIsAdmin = React.useMemo<boolean>(() => userRoles.includes('admin'), [userRoles]);
+  const userCanManageSystem = React.useMemo<boolean>(() => userIsAdmin || userPermissions.includes('system.manage'), [userIsAdmin, userPermissions]);
+  const userCanSeeFinance = React.useMemo(() => userCanManageSystem || userPermissions.some(p => p.startsWith('finanzas')), [userCanManageSystem, userPermissions]);
 
   return (
     <div style={{ minHeight: '100vh', width: '100vw', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -47,7 +46,7 @@ export default function Home() {
       <div style={{ maxWidth: 1200, padding: 40, textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <div style={{ display: 'flex', gap: 16 }}>
-            {(!userLoading && roles && !roles.includes('colaborador')) && (
+            {(!loading && userCanSeeFinance) && (
               <Card
                 title="Finanzas"
                 color="#2E7D32"
@@ -61,7 +60,7 @@ export default function Home() {
               icon={<FaClock size={36} />}
               onClick={() => navigate('/horarios')}
             />
-            {(!userLoading && roles && roles.includes('admin')) && (
+            {(userCanManageSystem) && (
               <Card
                 title="Gestionar sistema"
                 color="#d2b48c"

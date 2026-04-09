@@ -12,29 +12,34 @@ export default function useCurrentUser() {
     }
   });
   const [loading, setLoading] = React.useState<boolean>(() => user === null);
+  const mountedRef = React.useRef(true);
 
-  React.useEffect(() => {
-    let mounted = true;
-    // always try to refresh in background (but don't block initial paint)
-    (async () => {
-      setLoading(true);
-      try {
-        const resp = await getCurrentUser();
-        if (!mounted) return;
-        const u = resp?.data ?? null;
-        setUser(u);
-        try { sessionStorage.setItem('current_user', JSON.stringify(u)); } catch (e) { /* ignore */ }
-      } catch (e) {
-        if (!mounted) return;
-        // if unauthorized or error, clear cached user
-        setUser(null);
-        try { sessionStorage.removeItem('current_user'); } catch (er) { /* ignore */ }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
+  const refetch = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const resp = await getCurrentUser();
+      const u = resp?.data ?? null;
+      if (!mountedRef.current) return;
+      setUser(u);
+      try { sessionStorage.setItem('current_user', JSON.stringify(u)); } catch (e) { /* ignore */ }
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setUser(null);
+      try { sessionStorage.removeItem('current_user'); } catch (er) { /* ignore */ }
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
   }, []);
 
-  return { user, loading } as const;
+  React.useEffect(() => {
+    mountedRef.current = true;
+    // always try to refresh in background (but don't block initial paint)
+    (async () => {
+      // call refetch to keep single logic path
+      await refetch();
+    })();
+    return () => { mountedRef.current = false; };
+  }, [refetch]);
+
+  return { user, loading, refetch } as const;
 }

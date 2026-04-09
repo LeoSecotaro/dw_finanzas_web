@@ -7,14 +7,17 @@
 .columns { display:flex; gap:16px }
 .colLeft, .colRight { flex:1 }
 .colTitle { font-weight:700; margin-bottom:8px; color: #fff }
-.list { background:#202425; border-radius:8px; min-height:300px; padding:12px; color:#fff }
+.list { background:#232737; border-radius:8px; min-height:300px; padding:12px; color:#fff }
 .listRight { background:#232737; border-radius:8px; min-height:300px; padding:12px; overflow:auto; color:#fff }
 .empty { color:#aaa; padding:8px }
-.item, .activeItem { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px; border-radius:6px; background:rgba(255,255,255,0.02); margin-bottom:8px; color:#fff }
+.item, .activeItem { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px; border-radius:6px; background:rgba(255,255,255,0.02); margin-bottom:8px; color:#fff; transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+.item:hover, .activeItem:hover { transform: translateY(-6px); box-shadow: 0 10px 30px rgba(0,0,0,0.45); background: rgba(255,255,255,0.03); }
 .itemLabel { font-weight:600; color:#fff }
 .itemDesc { font-size:12px; color:#bbb }
-.addBtn { background:#2b8aef; color:#fff; border:none; padding:6px 8px; border-radius:6px; cursor:pointer }
-.removeBtn { background:#d64545; color:#fff; border:none; padding:6px 8px; border-radius:6px; cursor:pointer }
+.addBtn { background:#2b8aef; color:#fff; border:none; padding:6px 8px; border-radius:6px; cursor:pointer; transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease; }
+.addBtn:hover { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(15,98,217,0.14); background:#1f6fe6 }
+.removeBtn { background:#d64545; color:#fff; border:none; padding:6px 8px; border-radius:6px; cursor:pointer; transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease; }
+.removeBtn:hover { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(214,69,69,0.12); background:#c0392b }
 
 /* ensure scrollbars/text inside options readable */
 .list ::-webkit-scrollbar { width: 10px }
